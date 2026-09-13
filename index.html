@@ -226,7 +226,7 @@
         <div class="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-fade-in">
             <div class="p-5 bg-emerald-700 text-white flex justify-between items-center">
                 <h3 class="text-lg font-bold flex items-center space-x-2">
-                    <i class="fa-solid fa-camera"></i>
+                    <i class="fa-solid fa-qrcode"></i>
                     <span>สแกน QR Code ครุภัณฑ์</span>
                 </h3>
                 <button onclick="closeScannerModal()" class="text-emerald-100 hover:text-white p-1 rounded-lg">
@@ -234,8 +234,47 @@
                 </button>
             </div>
             <div class="p-6">
-                <div id="reader" class="w-full rounded-2xl overflow-hidden border-2 border-dashed border-emerald-300 bg-slate-900 min-h-[260px]"></div>
-                <p class="text-xs text-slate-500 text-center mt-3">ส่องกล้องไปที่ QR Code ของครุภัณฑ์เทศบาลนครภูเก็ต เพื่อค้นหาและดูรายละเอียดทันที</p>
+                <!-- Tabs for Camera / File Upload -->
+                <div class="flex border-b border-slate-200 mb-4 text-sm font-semibold">
+                    <button id="tab-cam" onclick="switchScannerTab('cam')" class="py-2.5 px-4 border-b-2 border-emerald-600 text-emerald-700 flex items-center space-x-2 font-bold">
+                        <i class="fa-solid fa-camera"></i>
+                        <span>กล้องสแกนสด</span>
+                    </button>
+                    <button id="tab-file" onclick="switchScannerTab('file')" class="py-2.5 px-4 border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2">
+                        <i class="fa-solid fa-file-image"></i>
+                        <span>อัปโหลดรูปภาพ / ถ่ายภาพ</span>
+                    </button>
+                </div>
+
+                <!-- Live Camera View Container -->
+                <div id="cam-scan-container">
+                    <div id="reader" class="w-full rounded-2xl overflow-hidden border-2 border-dashed border-emerald-300 bg-slate-900 min-h-[260px] flex items-center justify-center relative"></div>
+                    
+                    <!-- Scanner Error Alert -->
+                    <div id="scanner-error" class="hidden mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
+                        <p class="font-bold flex items-center text-amber-900">
+                            <i class="fa-solid fa-triangle-exclamation mr-1.5 text-amber-600 text-sm"></i> 
+                            ไม่สามารถเปิดกล้องได้
+                        </p>
+                        <p id="scanner-error-text" class="mt-1 text-slate-600">เบราว์เซอร์หรือสิทธิ์ความปลอดภัยในกรอบแสดงผลบล็อกการเปิดกล้อง ให้สลับไปที่แท็บ "อัปโหลดรูปภาพ / ถ่ายภาพ" ด้านบนแทน</p>
+                    </div>
+                </div>
+
+                <!-- File Upload Fallback Container -->
+                <div id="file-scan-container" class="hidden text-center py-8 px-4 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl">
+                    <div class="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <p class="text-sm font-bold text-slate-800">เลือกรูปภาพที่มี QR Code หรือถ่ายภาพ</p>
+                    <p class="text-xs text-slate-500 mt-1 mb-5">หากไม่สามารถใช้กล้องสดได้ สามารถถ่ายรูป QR Code บนครุภัณฑ์แล้วนำมาอัปโหลดที่นี่ได้ทันที</p>
+                    <label class="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl cursor-pointer shadow transition inline-flex items-center space-x-2">
+                        <i class="fa-solid fa-image"></i>
+                        <span>เลือกรูปภาพ QR Code</span>
+                        <input type="file" id="qr-file-input" accept="image/*" onchange="handleFileQRScan(this)" class="hidden">
+                    </label>
+                </div>
+
+                <p class="text-xs text-slate-500 text-center mt-4">ส่องกล้องหรืออัปโหลดภาพ QR Code เพื่อเปิดดูรายละเอียดครุภัณฑ์</p>
             </div>
             <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
                 <button onclick="closeScannerModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-medium text-sm">ปิดหน้าต่าง</button>
@@ -575,7 +614,8 @@
         // State variables
         let assets = [];
         let activeCategory = "ทั้งหมด";
-        let html5QrCodeScanner = null;
+        let html5QrCode = null;
+        let isScanningCamera = false;
         const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwf46sQv02t4BTpAHmYhp6Q5xsaKjs7D0y42a0gPwrv9e4o8DCkNMrLm6kbp1UF5GpoVQ/exec";
         let scriptUrl = localStorage.getItem("phuket_appscript_url") || DEFAULT_SCRIPT_URL;
 
@@ -1066,15 +1106,121 @@ function formatDate(val) {
 
         function openScannerModal() {
             document.getElementById('scanner-modal').classList.remove('hidden');
-            html5QrCodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 220, height: 220 } });
-            html5QrCodeScanner.render(onScanSuccess, onScanFailure);
+            switchScannerTab('cam');
         }
 
-        function closeScannerModal() {
-            if (html5QrCodeScanner) {
-                html5QrCodeScanner.clear().catch(e => console.error(e));
+        function switchScannerTab(tab) {
+            const camTab = document.getElementById('tab-cam');
+            const fileTab = document.getElementById('tab-file');
+            const camContainer = document.getElementById('cam-scan-container');
+            const fileContainer = document.getElementById('file-scan-container');
+
+            if (tab === 'cam') {
+                camTab.className = "py-2.5 px-4 border-b-2 border-emerald-600 text-emerald-700 flex items-center space-x-2 font-bold";
+                fileTab.className = "py-2.5 px-4 border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2";
+                camContainer.classList.remove('hidden');
+                fileContainer.classList.add('hidden');
+                startCameraScanner();
+            } else {
+                fileTab.className = "py-2.5 px-4 border-b-2 border-emerald-600 text-emerald-700 flex items-center space-x-2 font-bold";
+                camTab.className = "py-2.5 px-4 border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2";
+                fileContainer.classList.remove('hidden');
+                camContainer.classList.add('hidden');
+                stopCameraScanner();
             }
+        }
+
+        async function startCameraScanner() {
+            const errorEl = document.getElementById('scanner-error');
+            errorEl.classList.add('hidden');
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showCameraError("เบราว์เซอร์หรืออุปกรณ์ไม่อนุญาตให้เปิดกล้องสดจากกรอบแสดงผล (Iframe Security)");
+                return;
+            }
+
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
+
+            try {
+                if (isScanningCamera) {
+                    await stopCameraScanner();
+                }
+                
+                await html5QrCode.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 220, height: 220 } },
+                    onScanSuccess,
+                    onScanFailure
+                );
+                isScanningCamera = true;
+            } catch (err) {
+                console.error("Camera start error:", err);
+                try {
+                    const cameras = await Html5Qrcode.getCameras();
+                    if (cameras && cameras.length > 0) {
+                        const backCam = cameras.find(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('rear')) || cameras[0];
+                        await html5QrCode.start(
+                            backCam.id,
+                            { fps: 10, qrbox: { width: 220, height: 220 } },
+                            onScanSuccess,
+                            onScanFailure
+                        );
+                        isScanningCamera = true;
+                        return;
+                    }
+                } catch(e) {
+                    console.error("Camera enumeration failed:", e);
+                }
+                showCameraError(err && err.message ? err.message : "ไม่สามารถขอเข้าถึงกล้องถ่ายรูปได้");
+            }
+        }
+
+        async function stopCameraScanner() {
+            if (html5QrCode && isScanningCamera) {
+                try {
+                    await html5QrCode.stop();
+                } catch (e) {
+                    console.error("Stop camera error:", e);
+                }
+                isScanningCamera = false;
+            }
+        }
+
+        function showCameraError(msg) {
+            const errorEl = document.getElementById('scanner-error');
+            const textEl = document.getElementById('scanner-error-text');
+            if (errorEl && textEl) {
+                textEl.innerText = msg + " — แนะนำให้สลับไปใช้วิธี 'อัปโหลดรูปภาพ / ถ่ายภาพ' ด้านบนแทน";
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        async function closeScannerModal() {
+            await stopCameraScanner();
             document.getElementById('scanner-modal').classList.add('hidden');
+        }
+
+        async function handleFileQRScan(input) {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+            
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
+
+            try {
+                if (isScanningCamera) {
+                    await stopCameraScanner();
+                }
+                const decodedText = await html5QrCode.scanFile(file, true);
+                onScanSuccess(decodedText);
+            } catch (err) {
+                alert("ไม่พบ QR Code ในรูปภาพที่เลือก กรุณาเลือกรูปภาพที่มี QR Code ที่ชัดเจน");
+            } finally {
+                input.value = "";
+            }
         }
 
         function onScanSuccess(decodedText) {
@@ -1088,7 +1234,7 @@ function formatDate(val) {
         }
 
         function onScanFailure(error) {
-            // quiet warning for scanner frame scan failures
+            // quiet warning for camera frames without QR code
         }
 
         function toggleSelectAll(master) {
