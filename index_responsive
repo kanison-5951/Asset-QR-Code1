@@ -1,0 +1,1626 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบริหารจัดการครุภัณฑ์ผ่าน QR Code - เทศบาลนครภูเก็ต</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        phuket: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                            800: '#065f46',
+                            900: '#064e3b',
+                        }
+                    },
+                    fontFamily: {
+                        sarabun: ['Sarabun', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Font Sarabun -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- QRCode JS Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- HTML5 QR Code Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: #f4f7f6;
+        }
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block !important;
+            }
+            body {
+                background-color: white !important;
+            }
+            .page-break {
+                page-break-after: always;
+            }
+        }
+        .print-only {
+            display: none;
+        }
+        .glass-header {
+            background: rgba(4, 120, 87, 0.95);
+            backdrop-filter: blur(10px);
+        }
+    
+/* Thai Buddhist calendar */
+#thai-calendar button{font-family:inherit}
+.thai-cal-day{height:34px;border-radius:9px;font-size:13px;color:#334155}
+.thai-cal-day:hover{background:#ecfdf5;color:#047857}
+.thai-cal-day.today{font-weight:800;box-shadow:inset 0 0 0 1px #10b981}
+.thai-cal-day.selected{background:#047857;color:#fff}
+.thai-cal-day.muted{color:#cbd5e1}
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <header class="glass-header text-white shadow-lg sticky top-0 z-30 no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-20">
+                <!-- Logo & Title -->
+                <div class="flex items-center space-x-4">
+                    <div class="bg-white p-1.5 rounded-full shadow-md flex-shrink-0">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Emblem_of_Phuket_City.png/480px-Emblem_of_Phuket_City.png" 
+                             alt="ตราเทศบาลนครภูเก็ต" 
+                             class="h-12 w-12 object-contain"
+                             onerror="this.onerror=null; this.src='https://placehold.co/100x100/047857/ffffff?text=PKT';">
+                    </div>
+                    <div>
+                        <h1 class="text-xl sm:text-2xl font-bold tracking-tight">ระบบบริหารจัดการครุภัณฑ์ผ่าน QR Code</h1>
+                        <p class="text-xs sm:text-sm text-emerald-100">งานศูนย์บริการสาธารณสุข กองการแพทย์ เทศบาลนครภูเก็ต</p>
+                    </div>
+                </div>
+
+                <!-- Action Top Buttons -->
+                <div class="flex items-center space-x-2">
+                    <button onclick="openScannerModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-sm font-medium shadow transition flex items-center space-x-2">
+                        <i class="fa-solid fa-qrcode text-lg"></i>
+                        <span class="hidden md:inline">สแกน QR Code</span>
+                    </button>
+                    <button onclick="openAssetModal()" class="bg-white text-phuket-800 hover:bg-emerald-50 px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-sm font-semibold shadow transition flex items-center space-x-2">
+                        <i class="fa-solid fa-plus text-lg"></i>
+                        <span class="hidden md:inline">เพิ่มครุภัณฑ์ใหม่</span>
+                    </button>
+                    <button onclick="openAppsScriptModal()" class="bg-emerald-800 hover:bg-emerald-900 text-emerald-100 p-2 rounded-lg text-sm shadow transition" title="ตั้งค่าเชื่อมต่อ Google Sheets / Apps Script">
+                        <i class="fa-solid fa-cloud-arrow-up text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 no-print">
+
+        <!-- Notification Banner -->
+        <div id="sync-status" class="hidden mb-4 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-triangle-exclamation text-amber-600 text-lg"></i>
+                <span id="sync-status-text">ยังไม่ได้ตั้งค่า Web App URL ของ Google Apps Script ข้อมูลปัจจุบันจะทำงานในโหมดตัวอย่าง (Offline/Local)</span>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button id="btn-force-upload" onclick="forceSyncToSheet()" class="hidden text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg font-semibold shadow transition">
+                    <i class="fa-solid fa-upload mr-1"></i> ส่งข้อมูลไป Google Sheet
+                </button>
+                <button onclick="openAppsScriptModal()" class="underline text-amber-900 font-semibold hover:text-black">ตั้งค่า / โค้ด</button>
+            </div>
+        </div>
+
+        <!-- Dashboard Stats -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">รายการครุภัณฑ์ทั้งหมด</p>
+                    <h3 class="text-2xl font-bold text-slate-800 mt-1" id="stat-total-count">0</h3>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-boxes-stacked"></i>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">มูลค่ารวมทั้งสิ้น</p>
+                    <h3 class="text-2xl font-bold text-emerald-700 mt-1" id="stat-total-value">฿0</h3>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-baht-sign"></i>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">ประเภทครุภัณฑ์</p>
+                    <h3 class="text-2xl font-bold text-slate-800 mt-1" id="stat-category-count">0</h3>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-layer-group"></i>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">สถานที่จัดเก็บ</p>
+                    <h3 class="text-2xl font-bold text-slate-800 mt-1" id="stat-location-count">0</h3>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-location-dot"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-6">
+            <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+
+                <!-- Categories Dropdown Filter & Category Management Button -->
+                <div class="flex items-center space-x-2 w-full md:w-auto">
+                    <div class="relative min-w-[200px] flex-grow sm:flex-grow-0">
+                        <select id="category-filter-select" onchange="setCategoryFilter(this.value)" class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 transition appearance-none cursor-pointer">
+                            <!-- Populated dynamically -->
+                        </select>
+                        <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none text-xs"></i>
+                    </div>
+                    <button onclick="openCategoryModal()" class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition whitespace-nowrap flex items-center space-x-1.5 shadow-sm" title="เพิ่ม / ลบ หมวดหมู่ครุภัณฑ์">
+                        <i class="fa-solid fa-tags text-emerald-600"></i>
+                        <span>จัดการหมวดหมู่</span>
+                    </button>
+                </div>
+
+                <!-- Search Input & View Toggle -->
+                <div class="flex items-center space-x-3 w-full md:w-auto justify-end">
+                    <div class="relative w-full md:w-64">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="search-input" onkeyup="filterAssets()" placeholder="ค้นหารหัส, รายการ, สถานที่..." 
+                               class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition">
+                    </div>
+                    <button onclick="fetchSheetData()" class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm transition" title="ดึงข้อมูลจาก Google Sheet">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                    <button onclick="printSelectedQR()" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-xl text-sm font-medium transition flex items-center space-x-2">
+                        <i class="fa-solid fa-print"></i>
+                        <span>พิมพ์สติกเกอร์ QR</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-emerald-900/5 text-emerald-900 text-xs font-semibold uppercase tracking-wider border-b border-emerald-900/10">
+                            <th class="p-4 text-center w-10">
+                                <input type="checkbox" id="select-all" onclick="toggleSelectAll(this)" class="rounded text-emerald-600 focus:ring-emerald-500">
+                            </th>
+                            <th class="p-4">คิวอาร์โค้ด</th>
+                            <th class="p-4">รหัสครุภัณฑ์ (ใหม่)</th>
+                            <th class="p-4">หมวด / รายการ</th>
+                            <th class="p-4">รายละเอียด</th>
+                            <th class="p-4 text-right">จำนวน (บาท)</th>
+                            <th class="p-4">วันที่ได้รับกรรมสิทธิ</th>
+                            <th class="p-4">สถานที่ใช้ประจำ</th>
+                            <th class="p-4 text-center">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="asset-table-body" class="divide-y divide-slate-100 text-sm text-slate-700">
+                        <!-- Data rows injected via JS -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Empty state -->
+            <div id="empty-state" class="hidden py-12 text-center text-slate-400">
+                <i class="fa-solid fa-box-open text-5xl mb-3 text-slate-300"></i>
+                <p class="text-base font-medium">ไม่พบข้อมูลครุภัณฑ์ที่ตรงตามเงื่อนไข</p>
+                <p class="text-xs text-slate-400 mt-1">ลองเปลี่ยนคำค้นหาหรือเพิ่มรายการครุภัณฑ์ใหม่</p>
+            </div>
+        </div>
+    </main>
+
+    
+    <!-- Modal 1: QR Code Scanner Modal -->
+    <div id="scanner-modal" class="fixed inset-0 bg-slate-900/70 z-50 hidden flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-fade-in">
+            <div class="p-5 bg-emerald-700 text-white flex justify-between items-center">
+                <h3 class="text-lg font-bold flex items-center space-x-2">
+                    <i class="fa-solid fa-qrcode"></i>
+                    <span>สแกน QR Code ครุภัณฑ์</span>
+                </h3>
+                <button onclick="closeScannerModal()" class="text-emerald-100 hover:text-white p-1 rounded-lg">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <!-- Tabs for Camera / File Upload -->
+                <div class="flex border-b border-slate-200 mb-4 text-sm font-semibold">
+                    <button id="tab-cam" onclick="switchScannerTab('cam')" class="py-2.5 px-4 border-b-2 border-emerald-600 text-emerald-700 flex items-center space-x-2 font-bold">
+                        <i class="fa-solid fa-camera"></i>
+                        <span>กล้องสแกนสด</span>
+                    </button>
+                    <button id="tab-file" onclick="switchScannerTab('file')" class="py-2.5 px-4 border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2">
+                        <i class="fa-solid fa-file-image"></i>
+                        <span>อัปโหลดรูปภาพ / ถ่ายภาพ</span>
+                    </button>
+                </div>
+
+                <!-- Live Camera View Container -->
+                <div id="cam-scan-container">
+                    <div id="reader" class="w-full rounded-2xl overflow-hidden border-2 border-dashed border-emerald-300 bg-slate-900 min-h-[260px] flex items-center justify-center relative"></div>
+                    
+                    <!-- Scanner Error Alert -->
+                    <div id="scanner-error" class="hidden mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
+                        <p class="font-bold flex items-center text-amber-900">
+                            <i class="fa-solid fa-triangle-exclamation mr-1.5 text-amber-600 text-sm"></i> 
+                            ไม่สามารถเปิดกล้องได้
+                        </p>
+                        <p id="scanner-error-text" class="mt-1 text-slate-600">เบราว์เซอร์หรือสิทธิ์ความปลอดภัยในกรอบแสดงผลบล็อกการเปิดกล้อง ให้สลับไปที่แท็บ "อัปโหลดรูปภาพ / ถ่ายภาพ" ด้านบนแทน</p>
+                    </div>
+                </div>
+
+                <!-- File Upload Fallback Container -->
+                <div id="file-scan-container" class="hidden text-center py-8 px-4 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl">
+                    <div class="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <p class="text-sm font-bold text-slate-800">เลือกรูปภาพที่มี QR Code หรือถ่ายภาพ</p>
+                    <p class="text-xs text-slate-500 mt-1 mb-5">หากไม่สามารถใช้กล้องสดได้ สามารถถ่ายรูป QR Code บนครุภัณฑ์แล้วนำมาอัปโหลดที่นี่ได้ทันที</p>
+                    <label class="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl cursor-pointer shadow transition inline-flex items-center space-x-2">
+                        <i class="fa-solid fa-image"></i>
+                        <span>เลือกรูปภาพ QR Code</span>
+                        <input type="file" id="qr-file-input" accept="image/*" onchange="handleFileQRScan(this)" class="hidden">
+                    </label>
+                </div>
+
+                <p class="text-xs text-slate-500 text-center mt-4">ส่องกล้องหรืออัปโหลดภาพ QR Code เพื่อเปิดดูรายละเอียดครุภัณฑ์</p>
+            </div>
+            <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button onclick="closeScannerModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-medium text-sm">ปิดหน้าต่าง</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Add / Edit Asset Modal -->
+    <div id="asset-modal" class="fixed inset-0 bg-slate-900/70 z-50 hidden flex items-center justify-center p-4 overflow-y-auto no-print">
+        <div class="bg-white rounded-3xl max-w-3xl w-full my-8 overflow-hidden shadow-2xl">
+            <div class="p-5 bg-emerald-700 text-white flex justify-between items-center">
+                <h3 class="text-lg font-bold flex items-center space-x-2" id="asset-modal-title">
+                    <i class="fa-solid fa-file-pen"></i>
+                    <span>บันทึกข้อมูลครุภัณฑ์</span>
+                </h3>
+                <button onclick="closeAssetModal()" class="text-emerald-100 hover:text-white p-1 rounded-lg">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            
+            <form id="asset-form" onsubmit="saveAsset(event)" class="p-6 space-y-4">
+                <input type="hidden" id="form-edit-index" value="-1">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <!-- หมวด/รายการ -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">หมวด / ประเภทครุภัณฑ์ <span class="text-red-500">*</span></label>
+                        <select id="form-category" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                            <!-- Options populated dynamically -->
+                        </select>
+                    </div>
+
+                    <!-- รายการ/ชื่อครุภัณฑ์ -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">รายการ (ชื่อครุภัณฑ์) <span class="text-red-500">*</span></label>
+                        <input type="text" id="form-name" required placeholder="เช่น โต๊ะทำงานไม้, เครื่องปริ้นเตอร์ Laser" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+
+                    <!-- รหัสครุภัณฑ์หมายเลขใหม่ -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">รหัสครุภัณฑ์หมายเลขใหม่ <span class="text-red-500">*</span></label>
+                        <div class="flex space-x-2">
+                            <input type="text" id="form-new-code" required placeholder="เช่น 7440-001-0001/66" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                            <button type="button" onclick="generateAutoCode()" class="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs hover:bg-slate-200 font-medium whitespace-nowrap">อัตโนมัติ</button>
+                        </div>
+                    </div>
+
+                    <!-- รหัสครุภัณฑ์หมายเลขเดิม / หมายเหตุ -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">หมายเหตุ / รหัสครุภัณฑ์หมายเลขเดิม</label>
+                        <input type="text" id="form-old-code" placeholder="เช่น รหัสเดิม 410-54-0012" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+
+                    <!-- รายละเอียด -->
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">รายละเอียด / ยี่ห้อ / รุ่น / สเปค</label>
+                        <textarea id="form-details" rows="2" placeholder="ระบุยี่ห้อ ขนาด สี สเปค หรือลักษณะเฉพาะ..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"></textarea>
+                    </div>
+
+                    <!-- งบประมาณ -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">งบประมาณ</label>
+                        <select id="form-budget" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                            <option value="เงินงบประมาณเทศบาล">เงินงบประมาณเทศบาล</option>
+                            <option value="เงินอุดหนุน">เงินอุดหนุน</option>
+                            <option value="เงินบริจาค">เงินบริจาค</option>
+                            <option value="เงินบำรุงศูนย์บริการสาธารณสุข">เงินบำรุงศูนย์บริการสาธารณสุข</option>
+                            <option value="อื่นๆ">อื่นๆ</option>
+                        </select>
+                    </div>
+
+                    <!-- จำนวน (บาท) -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">จำนวนเงิน / ราคา (บาท)</label>
+                        <input type="number" step="0.01" id="form-price" placeholder="0.00" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+
+                    <!-- วัน/เดือน/ปี ที่ได้รับกรรมสิทธิ -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">วันที่ได้รับกรรมสิทธิ</label>
+                        <div class="relative">
+  <input type="text" id="form-date" inputmode="numeric" autocomplete="off" placeholder="วว/ดด/พ.ศ. เช่น 13/09/2569"
+         class="w-full p-2.5 pr-11 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+         onclick="toggleThaiCalendar()" oninput="normalizeThaiDateInput(this)">
+  <button type="button" onclick="toggleThaiCalendar(event)" class="absolute right-1 top-1 p-2 text-emerald-700 hover:bg-emerald-50 rounded-lg" aria-label="เปิดปฏิทิน">
+    <i class="fa-regular fa-calendar-days"></i>
+  </button>
+  <div id="thai-calendar" class="hidden absolute z-[80] mt-2 w-[310px] max-w-[calc(100vw-32px)] bg-white border border-slate-200 rounded-2xl shadow-2xl p-3 left-0">
+    <div class="flex items-center justify-between mb-2">
+      <button type="button" onclick="thaiCalendarPrev()" class="w-9 h-9 rounded-lg hover:bg-emerald-50 text-emerald-700"><i class="fa-solid fa-chevron-left"></i></button>
+      <div id="thai-calendar-title" class="font-bold text-emerald-800 text-sm"></div>
+      <button type="button" onclick="thaiCalendarNext()" class="w-9 h-9 rounded-lg hover:bg-emerald-50 text-emerald-700"><i class="fa-solid fa-chevron-right"></i></button>
+    </div>
+    <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-slate-400 mb-1">
+      <div>อา</div><div>จ</div><div>อ</div><div>พ</div><div>พฤ</div><div>ศ</div><div>ส</div>
+    </div>
+    <div id="thai-calendar-days" class="grid grid-cols-7 gap-1"></div>
+    <div class="mt-2 pt-2 border-t border-slate-100 flex justify-between">
+      <button type="button" onclick="thaiCalendarToday()" class="text-xs font-semibold text-emerald-700 hover:underline">วันนี้</button>
+      <button type="button" onclick="closeThaiCalendar()" class="text-xs text-slate-500 hover:underline">ปิด</button>
+    </div>
+  </div>
+</div>
+                    </div>
+
+                    <!-- เลขที่ฎีกา -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">เลขที่ฎีกา</label>
+                        <input type="text" id="form-dika" placeholder="เช่น 1234/66" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+
+                    <!-- สถานที่ใช้ประจำ -->
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">สถานที่ใช้ประจำ <span class="text-red-500">*</span></label>
+                        <input type="text" id="form-location" required placeholder="เช่น ห้องตรวจโรค 1, ห้องเวชระเบียน, งานเภสัชกรรม" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <button type="button" onclick="closeAssetModal()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium text-sm">ยกเลิก</button>
+                    <button type="submit" id="btn-save-submit" class="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-medium text-sm shadow flex items-center space-x-2">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        <span>บันทึกข้อมูล</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 3: View Detail Modal -->
+    <div id="view-modal" class="fixed inset-0 bg-slate-900/70 z-50 hidden flex items-center justify-center p-4 overflow-y-auto no-print">
+        <div class="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl">
+            <div class="bg-emerald-700 p-6 text-white text-center relative">
+                <button onclick="closeViewModal()" class="absolute right-4 top-4 text-emerald-100 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Emblem_of_Phuket_City.png/480px-Emblem_of_Phuket_City.png" 
+                     alt="โลโก้" class="h-16 w-16 mx-auto bg-white p-1 rounded-full mb-2 shadow"
+                     onerror="this.onerror=null; this.src='https://placehold.co/100x100/047857/ffffff?text=PKT';">
+                <h4 class="text-xs uppercase text-emerald-200 font-semibold tracking-wider">งานศูนย์บริการสาธารณสุข กองการแพทย์ เทศบาลนครภูเก็ต</h4>
+                <h3 id="view-title" class="text-xl font-bold mt-1">รายละเอียดครุภัณฑ์</h3>
+            </div>
+            
+            <div class="p-6 space-y-4">
+                <!-- Large QR Display -->
+                <div class="flex flex-col items-center justify-center p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
+                    <div id="view-qrcode" class="bg-white p-3 rounded-xl shadow-md border border-slate-100"></div>
+                    <p id="view-code-text" class="text-base font-bold font-mono text-emerald-900 mt-2">--</p>
+                </div>
+
+                <!-- Info Grid -->
+                <div class="divide-y divide-slate-100 text-sm">
+                    <div class="py-2.5 flex justify-between"><span class="text-slate-500">หมวด / ประเภท:</span> <span id="view-category" class="font-semibold text-slate-800">--</span></div>
+                    <div class="py-2.5 flex justify-between"><span class="text-slate-500">รายการ:</span> <span id="view-name" class="font-semibold text-slate-800">--</span></div>
+                    <div class="py-2.5 flex justify-between"><span class="text-slate-500">รายละเอียด:</span> <span id="view-details" class="text-slate-700 text-right">--</span></div>
+                    <div class="py-2.5 flex justify-between"><span class="text-slate-500">สถานที่ใช้ประจำ:</span> <span id="view-location" class="font-semibold text-emerald-700">--</span></div>
+                    <div class="py-2.5 flex justify-between"><span class="text-slate-500">งบประมาณ:</span> <span id="view-budget" class="text-slate-800">--</span></div>
+                    <div class="py-2.5 flex justify-between"><span class="text-slate-500">มูลค่า (บาท):</span> <span id="view-price" class="font-bold text-slate-900">--</span></div>
+                    <div class="py-2.5 flex justify-between"><span class="text-slate-500">วันที่ได้รับกรรมสิทธิ:</span> <span id="view-date" class="text-slate-800">--</span></div>
+                    <div class="py-2.5 flex justify-between"><span class="text-slate-500">เลขที่ฎีกา:</span> <span id="view-dika" class="text-slate-800">--</span></div>
+                    <div class="py-2.5 flex justify-between"><span class="text-slate-500">รหัสเดิม / หมายเหตุ:</span> <span id="view-oldcode" class="text-slate-500">--</span></div>
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-between">
+                <button onclick="printSingleQRFromView()" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-sm font-medium transition flex items-center space-x-2">
+                    <i class="fa-solid fa-print"></i>
+                    <span>พิมพ์ป้าย QR Code</span>
+                </button>
+                <button onclick="closeViewModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-sm font-medium">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 4: Google Apps Script Setup & Instructions -->
+    <div id="appscript-modal" class="fixed inset-0 bg-slate-900/70 z-50 hidden flex items-center justify-center p-4 overflow-y-auto no-print">
+        <div class="bg-white rounded-3xl max-w-3xl w-full my-8 overflow-hidden shadow-2xl">
+            <div class="p-5 bg-slate-800 text-white flex justify-between items-center">
+                <h3 class="text-lg font-bold flex items-center space-x-2">
+                    <i class="fa-solid fa-cloud-arrow-up text-emerald-400"></i>
+                    <span>การเชื่อมต่อ Google Sheets (อัปเดตโค้ด Apps Script ใหม่)</span>
+                </h3>
+                <button onclick="closeAppsScriptModal()" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 space-y-5">
+                <!-- Target Sheet Info -->
+                <div class="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-emerald-900 text-sm flex items-center justify-between">
+                    <div>
+                        <p class="font-bold">Google Sheet URL ของคุณ:</p>
+                        <p class="text-xs text-emerald-700 font-mono mt-0.5 truncate max-w-md">https://docs.google.com/spreadsheets/d/1NQ8aKt4fD4miBwLNuWGIFW6-Bi7aUe0J8E7FcCDyGz8/edit</p>
+                    </div>
+                    <a href="https://docs.google.com/spreadsheets/d/1NQ8aKt4fD4miBwLNuWGIFW6-Bi7aUe0J8E7FcCDyGz8/edit?usp=sharing" target="_blank" class="px-3 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-semibold hover:bg-emerald-800 transition">เปิด Sheet</a>
+                </div>
+
+                <!-- Web App URL Input -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">ระบุ Google Apps Script Web App URL</label>
+                    <input type="text" id="appscript-url-input" placeholder="https://script.google.com/macros/s/.../exec" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    <p class="text-xs text-slate-500 mt-1">หลังแก้ไขโค้ด Apps Script ให้กด <b>Deploy > New Deployment</b> (หรือ Manage Deployment > Edit > New Version) ทุกครั้ง</p>
+                </div>
+
+                <!-- Copy Code Instructions -->
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="block text-xs font-bold text-slate-700 uppercase text-emerald-800">ซอร์สโค้ด Google Apps Script ล่าสุด (แก้ไขปัญหาบันทึกข้อมูลแล้ว)</label>
+                        <button onclick="copyAppsScriptCode()" class="text-xs text-emerald-700 font-semibold hover:text-emerald-900 flex items-center space-x-1 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
+                            <i class="fa-regular fa-copy"></i>
+                            <span>คัดลอกโค้ดนี้</span>
+                        </button>
+                    </div>
+                    <textarea id="appscript-code-area" readonly rows="9" class="w-full p-3 bg-slate-900 text-emerald-400 rounded-xl text-xs font-mono border border-slate-700 focus:outline-none scrollbar-thin"></textarea>
+                </div>
+
+                <!-- Action Button for Pushing Data -->
+                <div class="p-4 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-bold text-amber-900">บันทึกข้อมูลเข้า Sheet โดยตรง:</p>
+                        <p class="text-[11px] text-amber-700">หากใน Sheet ยังเป็นตารางว่างเปล่า สามารถกดปุ่มนี้เพื่อส่งข้อมูลทั้งหมดเข้า Google Sheet ได้ทันที</p>
+                    </div>
+                    <button onclick="forceSyncToSheet()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-2">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>อัปโหลดข้อมูลสู่ Google Sheet</span>
+                    </button>
+                </div>
+
+                <!-- Step by step guide -->
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs text-slate-600 space-y-1">
+                    <p class="font-bold text-slate-800 text-sm mb-2">ขั้นตอนการอัปเดตโค้ด Apps Script:</p>
+                    <p>1. คัดลอกโค้ดด้านบนทั้งหมด ไปวางทับโค้ดเดิมใน <b>Extensions > Apps Script</b></p>
+                    <p>2. กด <b>บันทึก (Ctrl+S)</b></p>
+                    <p>3. กดปุ่ม <b>การจัดทำให้ใช้งานได้ (Deploy) > การจัดทำให้ใช้งานได้ใหม่ (New deployment)</b></p>
+                    <p>4. กำหนด "ผู้ที่มีสิทธิ์เข้าถึง (Who has access)" เป็น <b>"ทุกคน (Anyone)"</b> แล้วกด Deploy</p>
+                    <p>5. นำ Web App URL มาวางที่ช่องด้านบน แล้วกด "บันทึกและซิงค์ข้อมูล"</p>
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-end space-x-3">
+                <button onclick="closeAppsScriptModal()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-sm font-medium">ปิด</button>
+                <button onclick="saveAppsScriptUrl()" class="px-5 py-2 bg-emerald-700 text-white rounded-xl text-sm font-medium hover:bg-emerald-800">บันทึกและซิงค์ข้อมูล</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 5: Manage Categories Modal -->
+    <div id="category-modal" class="fixed inset-0 bg-slate-900/70 z-50 hidden flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl">
+            <div class="p-5 bg-emerald-700 text-white flex justify-between items-center">
+                <h3 class="text-lg font-bold flex items-center space-x-2">
+                    <i class="fa-solid fa-tags"></i>
+                    <span>จัดการหมวดหมู่ครุภัณฑ์</span>
+                </h3>
+                <button onclick="closeCategoryModal()" class="text-emerald-100 hover:text-white p-1 rounded-lg">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <form onsubmit="addNewCategory(event)" class="flex space-x-2">
+                    <input type="text" id="new-category-input" placeholder="พิมพ์ชื่อหมวดหมู่ใหม่..." required class="flex-grow p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    <button type="submit" class="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1 whitespace-nowrap">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>เพิ่ม</span>
+                    </button>
+                </form>
+                <div class="border-t border-slate-100 pt-3">
+                    <p class="text-xs font-bold text-slate-500 uppercase mb-2">รายการหมวดหมู่ทั้งหมด:</p>
+                    <div id="category-manage-list" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        <!-- Category items injected dynamically -->
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button onclick="closeCategoryModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-medium text-sm">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print Container (Hidden on screen, visible on print) -->
+    <div id="print-area" class="print-only p-4">
+        <div class="text-center mb-6 border-b-2 border-slate-800 pb-4">
+            <h2 class="text-2xl font-bold">ป้ายคิวอาร์โค้ดครุภัณฑ์ (QR Code Asset Label)</h2>
+            <p class="text-base">งานศูนย์บริการสาธารณสุข กองการแพทย์ เทศบาลนครภูเก็ต</p>
+        </div>
+        <div id="print-grid" class="grid grid-cols-2 gap-6">
+            <!-- Dynamically populated labels for print -->
+        </div>
+    </div>
+
+    <footer class="bg-white border-t border-slate-200 py-4 mt-8 no-print">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div>
+                © 2026 งานศูนย์บริการสาธารณสุข กองการแพทย์ เทศบาลนครภูเก็ต (Phuket City Municipality)
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="inline-flex items-center text-emerald-700 font-medium">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-ping"></span>
+                    ระบบพร้อมใช้งาน
+                </span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Default Initial Categories
+        const DEFAULT_CATEGORIES = ["โต๊ะ", "เก้าอี้", "ตู้", "คอมพิวเตอร์", "พัดลม", "เครื่องปริ้น", "อุปกรณ์การแพทย์", "เครื่องปรับอากาศ", "อื่นๆ"];
+        let customCategories = [];
+
+        // Default Mock Initial Data matching 10 requested fields
+        const INITIAL_ASSETS = [
+            {
+                category: "คอมพิวเตอร์",
+                name: "คอมพิวเตอร์ประมวลผล All-in-One",
+                details: "Core i5, RAM 16GB, SSD 512GB จอ 23.8 นิ้ว ยี่ห้อ DELL",
+                budget: "เงินงบประมาณเทศบาล",
+                price: 24500.00,
+                date: "2023-05-15",
+                dika: "1024/66",
+                newCode: "7440-001-0001/66",
+                location: "ห้องตรวจโรค 1",
+                oldCode: "410-54-0012"
+            },
+            {
+                category: "เครื่องปริ้น",
+                name: "เครื่องพิมพ์มัลติฟังก์ชันเลเซอร์",
+                details: "พิมพ์/สแกน/ถ่ายเอกสาร ขาวดำ ยี่ห้อ HP Laser MFP 137fnw",
+                budget: "เงินบำรุงศูนย์บริการสาธารณสุข",
+                price: 6850.00,
+                date: "2023-08-20",
+                dika: "1450/66",
+                newCode: "7440-002-0005/66",
+                location: "ห้องเวชระเบียน",
+                oldCode: "410-54-0045"
+            },
+            {
+                category: "โต๊ะ",
+                name: "โต๊ะทำงานพร้อมตู้ลิ้นชักข้าง",
+                details: "โต๊ะทำงานไม้สังเคราะห์ ขนาด 1.50 เมตร สีบีช/ขาว",
+                budget: "เงินงบประมาณเทศบาล",
+                price: 5200.00,
+                date: "2022-11-10",
+                dika: "890/65",
+                newCode: "7440-003-0012/65",
+                location: "ห้องหัวหน้าศูนย์บริการสาธารณสุข",
+                oldCode: "410-50-0089"
+            },
+            {
+                category: "เก้าอี้",
+                name: "เก้าอี้ทำงานพนักพิงสูง",
+                details: "เก้าอี้สำนักงานหมุนได้ พนักพิงผ้าตาข่าย มีพนักพิงศีรษะ",
+                budget: "เงินงบประมาณเทศบาล",
+                price: 3200.00,
+                date: "2022-11-10",
+                dika: "890/65",
+                newCode: "7440-004-0018/65",
+                location: "ห้องตรวจโรค 2",
+                oldCode: "410-50-0095"
+            },
+            {
+                category: "ตู้",
+                name: "ตู้เก็บเอกสารเหล็ก 4 ลิ้นชัก",
+                details: "ตู้เหล็กเก็บเอกสารพ่นสีเขียว พร้อมกุญแจล็อคอัตโนมัติ",
+                budget: "เงินอุดหนุน",
+                price: 4900.00,
+                date: "2021-03-25",
+                dika: "350/64",
+                newCode: "7440-005-0004/64",
+                location: "ห้องธุรการ",
+                oldCode: "410-48-0021"
+            },
+            {
+                category: "พัดลม",
+                name: "พัดลมติดผนัง 18 นิ้ว",
+                details: "พัดลมติดผนังรีโมท ยี่ห้อ Hatari สีขาว",
+                budget: "เงินบริจาค",
+                price: 1450.00,
+                date: "2023-01-12",
+                dika: "12/66",
+                newCode: "7440-006-0030/66",
+                location: "ห้องพักคอยผู้ป่วย",
+                oldCode: "-"
+            }
+        ];
+
+        // State variables
+        let assets = [];
+        let activeCategory = "ทั้งหมด";
+        let html5QrCode = null;
+        let isScanningCamera = false;
+        const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwf46sQv02t4BTpAHmYhp6Q5xsaKjs7D0y42a0gPwrv9e4o8DCkNMrLm6kbp1UF5GpoVQ/exec";
+        let scriptUrl = localStorage.getItem("phuket_appscript_url") || DEFAULT_SCRIPT_URL;
+
+        // Corrected 10-column Google Apps Script Code
+        const GOOGLE_APPS_SCRIPT_CODE = `// ==========================================
+// Google Apps Script สำหรับระบบบริหารจัดการครุภัณฑ์ เทศบาลนครภูเก็ต
+// ==========================================
+
+const SHEET_NAME = "รายการครุภัณฑ์";
+
+function doGet(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    sheet = createInitialSheet(ss);
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", data: [] }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  const items = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0] && !row[1] && !row[7]) continue; // Skip empty rows
+    
+    items.push({
+      category: row[0] || "",
+      name: row[1] || "",
+      details: row[2] || "",
+      budget: row[3] || "",
+      price: parseFloat(row[4]) || 0,
+      date: formatDate(row[5]),
+      dika: row[6] || "",
+      newCode: row[7] || "",
+      location: row[8] || "",
+      oldCode: row[9] || ""
+    });
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: "success", data: items }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(SHEET_NAME);
+    if (!sheet) {
+      sheet = createInitialSheet(ss);
+    }
+    
+    const postData = JSON.parse(e.postData.contents);
+    const action = postData.action;
+    
+    if (action === "saveAll") {
+      sheet.clearContents();
+      
+      // Header 10 Columns
+      sheet.appendRow([
+        "หมวด/ประเภท", "รายการ", "รายละเอียด", "งบประมาณ", "จำนวน (บาท)",
+        "วัน/เดือน/ปี ที่ได้รับกรรมสิทธิ", "เลขที่ฎีกา", "รหัสครุภัณฑ์หมายเลขใหม่",
+        "สถานที่ใช้ประจำ", "หมายเหตุ/รหัสเดิม"
+      ]);
+      
+      const items = postData.items || [];
+      if (items.length > 0) {
+        const rows = items.map(it => [
+          it.category || "",
+          it.name || "",
+          it.details || "",
+          it.budget || "",
+          parseFloat(it.price) || 0,
+          normalizeThaiDate(it.date),
+          it.dika || "",
+          it.newCode || "",
+          it.location || "",
+          it.oldCode || ""
+        ]);
+        
+        // Insert exact 10 columns width range
+        sheet.getRange(2, 1, rows.length, 10).setValues(rows);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", count: items.length }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Unknown action" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function createInitialSheet(ss) {
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+  }
+  sheet.appendRow([
+    "หมวด/ประเภท", "รายการ", "รายละเอียด", "งบประมาณ", "จำนวน (บาท)",
+    "วัน/เดือน/ปี ที่ได้รับกรรมสิทธิ", "เลขที่ฎีกา", "รหัสครุภัณฑ์หมายเลขใหม่",
+    "สถานที่ใช้ประจำ", "หมายเหตุ/รหัสเดิม"
+  ]);
+  return sheet;
+}
+
+function formatDate(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "dd/MM/") + (parseInt(Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy"), 10) + 543);
+  }
+  const m = String(val).match(/^(\\d{1,2})[\\/\\-](\\d{1,2})[\\/\\-](\\d{4})$/);
+  if (m) {
+    let y = parseInt(m[3],10);
+    if (y < 2400) y += 543;
+    return ("0"+m[1]).slice(-2)+"/"+("0"+m[2]).slice(-2)+"/"+y;
+  }
+  return val.toString();
+}
+function normalizeThaiDate(val) {
+  if (!val) return "";
+  const m = String(val).match(/^(\\d{1,2})[\\/\\-](\\d{1,2})[\\/\\-](\\d{4})$/);
+  if (!m) return val;
+  let y = parseInt(m[3],10);
+  if (y < 2400) y += 543;
+  return ("0"+m[1]).slice(-2)+"/"+("0"+m[2]).slice(-2)+"/"+y;
+ }`;
+
+        // Initialize Page
+        window.addEventListener('DOMContentLoaded', () => {
+            loadCategories();
+            loadLocalAssets();
+            document.getElementById('appscript-code-area').value = GOOGLE_APPS_SCRIPT_CODE;
+            document.getElementById('appscript-url-input').value = scriptUrl;
+            
+            if (scriptUrl) {
+                fetchSheetData();
+            } else {
+                showSyncStatus(true, "ยังไม่ได้ตั้งค่า Web App URL ของ Google Apps Script ข้อมูลปัจจุบันจะทำงานในโหมดตัวอย่าง (Local)");
+            }
+        });
+
+        // ===== Thai Buddhist date + Thailand time =====
+        const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+        let thaiCalYear = new Date().getFullYear();
+        let thaiCalMonth = new Date().getMonth();
+
+        function thaiNowParts() {
+            const parts = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            }).formatToParts(new Date());
+            const o = {};
+            parts.forEach(p => { if (p.type !== 'literal') o[p.type] = p.value; });
+            return { year:+o.year, month:+o.month-1, day:+o.day, hour:+o.hour, minute:+o.minute, second:+o.second };
+        }
+
+        function formatThaiDate(day, month, year) {
+            return String(day).padStart(2,'0') + '/' + String(month+1).padStart(2,'0') + '/' + (year+543);
+        }
+
+        function normalizeThaiDate(v) {
+            if (!v) return '';
+            const m = String(v).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (!m) return String(v).trim();
+            let y = parseInt(m[3],10);
+            if (y < 2400) y += 543;
+            return String(parseInt(m[1],10)).padStart(2,'0') + '/' + String(parseInt(m[2],10)).padStart(2,'0') + '/' + y;
+        }
+
+        function normalizeThaiDateInput(el) {
+            let v = el.value.replace(/[^0-9\/\-]/g,'');
+            if (/^\d{8}$/.test(v)) v = v.slice(0,2)+'/'+v.slice(2,4)+'/'+v.slice(4);
+            el.value = v;
+        }
+
+        function parseThaiDate(v) {
+            const m = String(v||'').match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (!m) return null;
+            let y = +m[3]; if (y >= 2400) y -= 543;
+            const mo = +m[2]-1, d = +m[1];
+            const dt = new Date(y, mo, d);
+            if (dt.getFullYear()!==y || dt.getMonth()!==mo || dt.getDate()!==d) return null;
+            return {day:d, month:mo, year:y};
+        }
+
+        function toggleThaiCalendar(e) {
+            if (e) e.stopPropagation();
+            const el = document.getElementById('thai-calendar');
+            if (el.classList.contains('hidden')) {
+                const p = parseThaiDate(document.getElementById('form-date').value);
+                const n = thaiNowParts();
+                thaiCalYear = p ? p.year : n.year;
+                thaiCalMonth = p ? p.month : n.month;
+                renderThaiCalendar();
+                el.classList.remove('hidden');
+            } else closeThaiCalendar();
+        }
+        function closeThaiCalendar(){ document.getElementById('thai-calendar').classList.add('hidden'); }
+        function thaiCalendarPrev(){ thaiCalMonth--; if(thaiCalMonth<0){thaiCalMonth=11;thaiCalYear--;} renderThaiCalendar(); }
+        function thaiCalendarNext(){ thaiCalMonth++; if(thaiCalMonth>11){thaiCalMonth=0;thaiCalYear++;} renderThaiCalendar(); }
+        function thaiCalendarToday(){ const n=thaiNowParts(); thaiCalYear=n.year; thaiCalMonth=n.month; pickThaiDate(n.day,n.month,n.year); }
+        function pickThaiDate(day,month,year){
+            document.getElementById('form-date').value = formatThaiDate(day,month,year);
+            closeThaiCalendar();
+        }
+        function renderThaiCalendar(){
+            const title=document.getElementById('thai-calendar-title');
+            title.textContent=THAI_MONTHS[thaiCalMonth]+' '+(thaiCalYear+543);
+            const box=document.getElementById('thai-calendar-days'); box.innerHTML='';
+            const first=new Date(thaiCalYear,thaiCalMonth,1).getDay();
+            const days=new Date(thaiCalYear,thaiCalMonth+1,0).getDate();
+            const prevDays=new Date(thaiCalYear,thaiCalMonth,0).getDate();
+            const selected=parseThaiDate(document.getElementById('form-date').value);
+            const now=thaiNowParts();
+            for(let i=0;i<42;i++){
+                let d=i-first+1, y=thaiCalYear, m=thaiCalMonth, muted=false;
+                if(d<=0){d=prevDays+d;m--;if(m<0){m=11;y--; } muted=true;}
+                else if(d>days){d=d-days;m++;if(m>11){m=0;y++;} muted=true;}
+                const b=document.createElement('button'); b.type='button'; b.className='thai-cal-day'+(muted?' muted':''); b.textContent=d;
+                if(d===now.day&&m===now.month&&y===now.year) b.classList.add('today');
+                if(selected&&d===selected.day&&m===selected.month&&y===selected.year) b.classList.add('selected');
+                b.onclick=()=>pickThaiDate(d,m,y); box.appendChild(b);
+            }
+        }
+
+        function updateThaiClock(){
+            const n=thaiNowParts();
+            const date=formatThaiDate(n.day,n.month,n.year);
+            const time=[n.hour,n.minute,n.second].map(x=>String(x).padStart(2,'0')).join(':');
+            const el=document.getElementById('thai-clock');
+            if(el) el.textContent='เวลาไทย (UTC+7) • '+date+' '+time+' น.';
+        }
+        setInterval(updateThaiClock,1000);
+        document.addEventListener('click', e=>{
+            const cal=document.getElementById('thai-calendar');
+            if(cal && !cal.classList.contains('hidden') && !e.target.closest('#thai-calendar') && !e.target.closest('#form-date')) closeThaiCalendar();
+        });
+        updateThaiClock();
+
+        // Category Management Functions
+        function loadCategories() {
+            const storedCats = localStorage.getItem('phuket_custom_categories');
+            if (storedCats) {
+                try {
+                    customCategories = JSON.parse(storedCats);
+                } catch(e) {
+                    customCategories = [...DEFAULT_CATEGORIES];
+                }
+            } else {
+                customCategories = [...DEFAULT_CATEGORIES];
+                saveCategories();
+            }
+            populateCategoryDropdown();
+        }
+
+        function saveCategories() {
+            localStorage.setItem('phuket_custom_categories', JSON.stringify(customCategories));
+            populateCategoryDropdown();
+        }
+
+        function populateCategoryDropdown() {
+            const select = document.getElementById('form-category');
+            if (!select) return;
+            const currentVal = select.value;
+            select.innerHTML = `<option value="">-- เลือกประเภทครุภัณฑ์ --</option>` + 
+                customCategories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('');
+            select.value = currentVal;
+        }
+
+        function openCategoryModal() {
+            renderCategoryManageList();
+            document.getElementById('category-modal').classList.remove('hidden');
+        }
+
+        function closeCategoryModal() {
+            document.getElementById('category-modal').classList.add('hidden');
+            document.getElementById('new-category-input').value = '';
+        }
+
+        function renderCategoryManageList() {
+            const container = document.getElementById('category-manage-list');
+            if (!container) return;
+            container.innerHTML = customCategories.map((cat, idx) => `
+                <div class="flex justify-between items-center p-2 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                    <span class="font-medium text-slate-800">${escapeHtml(cat)}</span>
+                    <button onclick="deleteCategory(${idx})" class="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition" title="ลบหมวดหมู่นี้">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function addNewCategory(e) {
+            e.preventDefault();
+            const input = document.getElementById('new-category-input');
+            const val = input.value.trim();
+            if (!val) return;
+            if (customCategories.includes(val)) {
+                alert("หมวดหมู่นี้มีอยู่ในระบบแล้ว");
+                return;
+            }
+            customCategories.push(val);
+            saveCategories();
+            renderCategoryManageList();
+            renderCategories();
+            input.value = '';
+        }
+
+        function deleteCategory(index) {
+            const catName = customCategories[index];
+            if (confirm(`คุณต้องการลบหมวดหมู่ "${catName}" ใช่หรือไม่?`)) {
+                customCategories.splice(index, 1);
+                saveCategories();
+                renderCategoryManageList();
+                if (activeCategory === catName) activeCategory = "ทั้งหมด";
+                renderCategories();
+                renderTable();
+            }
+        }
+
+        // Load or Save Local Storage
+        function loadLocalAssets() {
+            const stored = localStorage.getItem('phuket_assets_data');
+            if (stored) {
+                try {
+                    assets = JSON.parse(stored);
+                } catch(e) {
+                    assets = [...INITIAL_ASSETS];
+                }
+            } else {
+                assets = [...INITIAL_ASSETS];
+                saveLocalAssets();
+            }
+            renderApp();
+        }
+
+        function saveLocalAssets() {
+            localStorage.setItem('phuket_assets_data', JSON.stringify(assets));
+        }
+
+        function showSyncStatus(show, text = "", showUploadButton = false) {
+            const el = document.getElementById('sync-status');
+            const txt = document.getElementById('sync-status-text');
+            const btnUpload = document.getElementById('btn-force-upload');
+
+            if (show) {
+                el.classList.remove('hidden');
+                if (text) txt.innerText = text;
+                if (showUploadButton) {
+                    btnUpload.classList.remove('hidden');
+                } else {
+                    btnUpload.classList.add('hidden');
+                }
+            } else {
+                el.classList.add('hidden');
+            }
+        }
+
+        // Fetch from Google Apps Script Web App
+        async function fetchSheetData() {
+            if (!scriptUrl) return;
+            showSyncStatus(true, "กำลังซิงค์ข้อมูลจาก Google Sheet...", false);
+            try {
+                const res = await fetch(scriptUrl);
+                const json = await res.json();
+                if (json.status === "success" && Array.isArray(json.data)) {
+                    if (json.data.length > 0) {
+                        assets = json.data;
+                        saveLocalAssets();
+                        showSyncStatus(false);
+                        renderApp();
+                    } else {
+                        showSyncStatus(true, "ซิงค์สำเร็จแล้ว แต่ไม่พบข้อมูลใน Google Sheet (ตารางยังว่างเปล่า)", true);
+                    }
+                } else {
+                    showSyncStatus(true, "เกิดข้อผิดพลาดในการอ่านข้อมูลจาก Google Sheet", true);
+                }
+            } catch(e) {
+                console.error(e);
+                showSyncStatus(true, "ไม่สามารถอ่านข้อมูลจาก Google Apps Script ได้ (อาจติดสิทธิ์ Access หรือ CORS) กำลังแสดงข้อมูล Local", true);
+            }
+        }
+
+        // Sync local to Google Sheet via text/plain POST to avoid preflight CORS
+        async function syncToGoogleSheet() {
+            if (!scriptUrl) return false;
+            try {
+                const payload = {
+                    action: "saveAll",
+                    items: assets
+                };
+
+                await fetch(scriptUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+                return true;
+            } catch(err) {
+                console.error("Sheet sync error:", err);
+                return false;
+            }
+        }
+
+        async function forceSyncToSheet() {
+            if (!scriptUrl) {
+                openAppsScriptModal();
+                return;
+            }
+            showSyncStatus(true, "กำลังส่งข้อมูลทั้งหมดขึ้น Google Sheet...", false);
+            const success = await syncToGoogleSheet();
+            if (success) {
+                alert("ส่งข้อมูลครุภัณฑ์ปัจจุบันเข้า Google Sheet เรียบร้อยแล้ว!");
+                setTimeout(() => fetchSheetData(), 1200);
+            } else {
+                alert("ไม่สามารถส่งข้อมูลไปที่ Google Sheet ได้ กรุณาตรวจสอบว่าได้ระบุ URL Web App และตั้งค่าเป็น Anyone ถูกต้องหรือไม่");
+            }
+        }
+
+        function renderApp() {
+            renderStats();
+            renderCategories();
+            renderTable();
+        }
+
+        function renderStats() {
+            document.getElementById('stat-total-count').innerText = assets.length.toLocaleString('th-TH');
+            
+            const totalVal = assets.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0);
+            document.getElementById('stat-total-value').innerText = '฿' + totalVal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            const cats = new Set(assets.map(a => a.category).filter(Boolean));
+            document.getElementById('stat-category-count').innerText = cats.size;
+
+            const locs = new Set(assets.map(a => a.location).filter(Boolean));
+            document.getElementById('stat-location-count').innerText = locs.size;
+        }
+
+        function renderCategories() {
+            const select = document.getElementById('category-filter-select');
+            if (!select) return;
+            const categories = ["ทั้งหมด", ...customCategories];
+            
+            select.innerHTML = categories.map(cat => {
+                const isSelected = activeCategory === cat ? 'selected' : '';
+                return `<option value="${escapeHtml(cat)}" ${isSelected}>หมวดหมู่: ${escapeHtml(cat)}</option>`;
+            }).join('');
+        }
+
+        function setCategoryFilter(cat) {
+            activeCategory = cat;
+            renderCategories();
+            renderTable();
+        }
+
+        function filterAssets() {
+            renderTable();
+        }
+
+        function getFilteredAssets() {
+            const query = document.getElementById('search-input').value.toLowerCase().trim();
+            return assets.filter(item => {
+                const matchCategory = (activeCategory === "ทั้งหมด") || (item.category === activeCategory);
+                const matchQuery = !query || 
+                    (item.newCode && item.newCode.toLowerCase().includes(query)) ||
+                    (item.name && item.name.toLowerCase().includes(query)) ||
+                    (item.details && item.details.toLowerCase().includes(query)) ||
+                    (item.location && item.location.toLowerCase().includes(query)) ||
+                    (item.oldCode && item.oldCode.toLowerCase().includes(query));
+                return matchCategory && matchQuery;
+            });
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('asset-table-body');
+            const emptyState = document.getElementById('empty-state');
+            const filtered = getFilteredAssets();
+
+            tbody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            filtered.forEach((item, index) => {
+                const realIndex = assets.indexOf(item);
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50/80 transition group";
+                
+                const formattedPrice = (parseFloat(item.price) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+                const qrId = `qr-thumb-${realIndex}`;
+
+                tr.innerHTML = `
+                    <td class="p-4 text-center">
+                        <input type="checkbox" data-index="${realIndex}" class="asset-checkbox rounded text-emerald-600 focus:ring-emerald-500">
+                    </td>
+                    <td class="p-4 cursor-pointer" onclick="viewAssetDetail(${realIndex})">
+                        <div id="${qrId}" class="w-12 h-12 bg-white p-1 rounded-lg border border-slate-200 shadow-sm flex items-center justify-center"></div>
+                    </td>
+                    <td class="p-4 font-mono font-bold text-emerald-800 cursor-pointer" onclick="viewAssetDetail(${realIndex})">
+                        ${escapeHtml(item.newCode || '-')}
+                    </td>
+                    <td class="p-4">
+                        <span class="inline-block px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 mb-1">${escapeHtml(item.category || 'อื่นๆ')}</span>
+                        <div class="font-semibold text-slate-800">${escapeHtml(item.name || '-')}</div>
+                    </td>
+                    <td class="p-4 text-xs text-slate-500 max-w-xs truncate" title="${escapeHtml(item.details || '')}">
+                        ${escapeHtml(item.details || '-')}
+                    </td>
+                    <td class="p-4 text-right font-semibold text-slate-900">
+                        ฿${formattedPrice}
+                    </td>
+                    <td class="p-4 text-xs text-slate-600">
+                        ${escapeHtml(item.date || '-')}
+                    </td>
+                    <td class="p-4">
+                        <span class="inline-flex items-center text-xs font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
+                            <i class="fa-solid fa-location-dot text-emerald-600 mr-1.5"></i>
+                            ${escapeHtml(item.location || '-')}
+                        </span>
+                    </td>
+                    <td class="p-4 text-center">
+                        <div class="flex items-center justify-center space-x-2">
+                            <button onclick="viewAssetDetail(${realIndex})" class="p-2 text-slate-400 hover:text-emerald-700 rounded-lg hover:bg-emerald-50 transition" title="ดูรายละเอียด / QR">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                            <button onclick="editAsset(${realIndex})" class="p-2 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition" title="แก้ไข">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="deleteAsset(${realIndex})" class="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition" title="ลบ">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+
+                tbody.appendChild(tr);
+
+                // Generate QR Thumbnail
+                setTimeout(() => {
+                    const el = document.getElementById(qrId);
+                    if (el) {
+                        el.innerHTML = "";
+                        new QRCode(el, {
+                            text: item.newCode || item.name,
+                            width: 40,
+                            height: 40,
+                            correctLevel: QRCode.CorrectLevel.L
+                        });
+                    }
+                }, 10);
+            });
+        }
+
+        function openAssetModal(isEdit = false) {
+            document.getElementById('asset-modal-title').innerText = isEdit ? "แก้ไขข้อมูลครุภัณฑ์" : "เพิ่มครุภัณฑ์ใหม่";
+            document.getElementById('asset-modal').classList.remove('hidden');
+        }
+
+        function closeAssetModal() {
+            document.getElementById('asset-modal').classList.add('hidden');
+            document.getElementById('asset-form').reset();
+            document.getElementById('form-edit-index').value = "-1";
+        }
+
+        function editAsset(index) {
+            const item = assets[index];
+            if (!item) return;
+
+            document.getElementById('form-edit-index').value = index;
+            document.getElementById('form-category').value = item.category || "";
+            document.getElementById('form-name').value = item.name || "";
+            document.getElementById('form-new-code').value = item.newCode || "";
+            document.getElementById('form-old-code').value = item.oldCode || "";
+            document.getElementById('form-details').value = item.details || "";
+            document.getElementById('form-budget').value = item.budget || "เงินงบประมาณเทศบาล";
+            document.getElementById('form-price').value = item.price || "";
+            document.getElementById('form-date').value = normalizeThaiDate(item.date || '');
+            document.getElementById('form-dika').value = item.dika || "";
+            document.getElementById('form-location').value = item.location || "";
+
+            openAssetModal(true);
+        }
+
+        async function saveAsset(e) {
+            e.preventDefault();
+            const editIdx = parseInt(document.getElementById('form-edit-index').value);
+
+            const newItem = {
+                category: document.getElementById('form-category').value,
+                name: document.getElementById('form-name').value,
+                newCode: document.getElementById('form-new-code').value,
+                oldCode: document.getElementById('form-old-code').value,
+                details: document.getElementById('form-details').value,
+                budget: document.getElementById('form-budget').value,
+                price: parseFloat(document.getElementById('form-price').value) || 0,
+                date: document.getElementById('form-date').value,
+                dika: document.getElementById('form-dika').value,
+                location: document.getElementById('form-location').value
+            };
+
+            if (editIdx >= 0 && editIdx < assets.length) {
+                assets[editIdx] = newItem;
+            } else {
+                assets.unshift(newItem);
+            }
+
+            saveLocalAssets();
+            renderApp();
+            closeAssetModal();
+            
+            // Sync to Google Sheet
+            await syncToGoogleSheet();
+        }
+
+        async function deleteAsset(index) {
+            if (confirm(`คุณต้องการลบรายการครุภัณฑ์ "${assets[index].name}" (${assets[index].newCode}) ใช่หรือไม่?`)) {
+                assets.splice(index, 1);
+                saveLocalAssets();
+                renderApp();
+                await syncToGoogleSheet();
+            }
+        }
+
+        function generateAutoCode() {
+            const year = (new Date().getFullYear() + 543).toString().substring(2);
+            const randomId = Math.floor(1000 + Math.random() * 9000);
+            document.getElementById('form-new-code').value = `7440-00${Math.floor(Math.random()*9)+1}-${randomId}/${year}`;
+        }
+
+        let currentViewIndex = -1;
+        function viewAssetDetail(index) {
+            const item = assets[index];
+            if (!item) return;
+            currentViewIndex = index;
+
+            document.getElementById('view-title').innerText = item.name || "รายละเอียดครุภัณฑ์";
+            document.getElementById('view-code-text').innerText = item.newCode || "-";
+            document.getElementById('view-category').innerText = item.category || "-";
+            document.getElementById('view-name').innerText = item.name || "-";
+            document.getElementById('view-details').innerText = item.details || "-";
+            document.getElementById('view-location').innerText = item.location || "-";
+            document.getElementById('view-budget').innerText = item.budget || "-";
+            document.getElementById('view-price').innerText = '฿' + (parseFloat(item.price) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+            document.getElementById('view-date').innerText = item.date || "-";
+            document.getElementById('view-dika').innerText = item.dika || "-";
+            document.getElementById('view-oldcode').innerText = item.oldCode || "-";
+
+            const qrContainer = document.getElementById('view-qrcode');
+            qrContainer.innerHTML = '';
+            new QRCode(qrContainer, {
+                text: item.newCode || item.name,
+                width: 140,
+                height: 140,
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            document.getElementById('view-modal').classList.remove('hidden');
+        }
+
+        function closeViewModal() {
+            document.getElementById('view-modal').classList.add('hidden');
+        }
+
+        function printSingleQRFromView() {
+            if (currentViewIndex >= 0) {
+                generatePrintLabels([assets[currentViewIndex]]);
+            }
+        }
+
+        function openScannerModal() {
+            document.getElementById('scanner-modal').classList.remove('hidden');
+            switchScannerTab('cam');
+        }
+
+        function switchScannerTab(tab) {
+            const camTab = document.getElementById('tab-cam');
+            const fileTab = document.getElementById('tab-file');
+            const camContainer = document.getElementById('cam-scan-container');
+            const fileContainer = document.getElementById('file-scan-container');
+
+            if (tab === 'cam') {
+                camTab.className = "py-2.5 px-4 border-b-2 border-emerald-600 text-emerald-700 flex items-center space-x-2 font-bold";
+                fileTab.className = "py-2.5 px-4 border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2";
+                camContainer.classList.remove('hidden');
+                fileContainer.classList.add('hidden');
+                startCameraScanner();
+            } else {
+                fileTab.className = "py-2.5 px-4 border-b-2 border-emerald-600 text-emerald-700 flex items-center space-x-2 font-bold";
+                camTab.className = "py-2.5 px-4 border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2";
+                fileContainer.classList.remove('hidden');
+                camContainer.classList.add('hidden');
+                stopCameraScanner();
+            }
+        }
+
+        async function startCameraScanner() {
+            const errorEl = document.getElementById('scanner-error');
+            errorEl.classList.add('hidden');
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showCameraError("เบราว์เซอร์หรืออุปกรณ์ไม่อนุญาตให้เปิดกล้องสดจากกรอบแสดงผล (Iframe Security)");
+                return;
+            }
+
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
+
+            try {
+                if (isScanningCamera) {
+                    await stopCameraScanner();
+                }
+                
+                await html5QrCode.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 220, height: 220 } },
+                    onScanSuccess,
+                    onScanFailure
+                );
+                isScanningCamera = true;
+            } catch (err) {
+                console.error("Camera start error:", err);
+                try {
+                    const cameras = await Html5Qrcode.getCameras();
+                    if (cameras && cameras.length > 0) {
+                        const backCam = cameras.find(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('rear')) || cameras[0];
+                        await html5QrCode.start(
+                            backCam.id,
+                            { fps: 10, qrbox: { width: 220, height: 220 } },
+                            onScanSuccess,
+                            onScanFailure
+                        );
+                        isScanningCamera = true;
+                        return;
+                    }
+                } catch(e) {
+                    console.error("Camera enumeration failed:", e);
+                }
+                showCameraError(err && err.message ? err.message : "ไม่สามารถขอเข้าถึงกล้องถ่ายรูปได้");
+            }
+        }
+
+        async function stopCameraScanner() {
+            if (html5QrCode && isScanningCamera) {
+                try {
+                    await html5QrCode.stop();
+                } catch (e) {
+                    console.error("Stop camera error:", e);
+                }
+                isScanningCamera = false;
+            }
+        }
+
+        function showCameraError(msg) {
+            const errorEl = document.getElementById('scanner-error');
+            const textEl = document.getElementById('scanner-error-text');
+            if (errorEl && textEl) {
+                textEl.innerText = msg + " — แนะนำให้สลับไปใช้วิธี 'อัปโหลดรูปภาพ / ถ่ายภาพ' ด้านบนแทน";
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        async function closeScannerModal() {
+            await stopCameraScanner();
+            document.getElementById('scanner-modal').classList.add('hidden');
+        }
+
+        async function handleFileQRScan(input) {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+            
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
+
+            try {
+                if (isScanningCamera) {
+                    await stopCameraScanner();
+                }
+                const decodedText = await html5QrCode.scanFile(file, true);
+                onScanSuccess(decodedText);
+            } catch (err) {
+                alert("ไม่พบ QR Code ในรูปภาพที่เลือก กรุณาเลือกรูปภาพที่มี QR Code ที่ชัดเจน");
+            } finally {
+                input.value = "";
+            }
+        }
+
+        function onScanSuccess(decodedText) {
+            closeScannerModal();
+            const rawText = (decodedText || "").trim();
+            
+            // Search exact match first by newCode or oldCode
+            let foundIndex = assets.findIndex(a => 
+                (a.newCode && a.newCode.trim() === rawText) || 
+                (a.oldCode && a.oldCode.trim() === rawText)
+            );
+
+            // Fallback match if QR code contains full code or substring match
+            if (foundIndex === -1) {
+                foundIndex = assets.findIndex(a => 
+                    (a.newCode && rawText.includes(a.newCode.trim())) ||
+                    (a.oldCode && rawText.includes(a.oldCode.trim())) ||
+                    (a.name && rawText.includes(a.name.trim()))
+                );
+            }
+
+            if (foundIndex !== -1) {
+                viewAssetDetail(foundIndex);
+            } else {
+                alert(`สแกน QR Code สำเร็จ: "${rawText}"\nแต่ไม่พบรายการครุภัณฑ์ที่ตรงกับรหัสนี้ในระบบ`);
+            }
+        }
+
+        function onScanFailure(error) {
+            // quiet warning for camera frames without QR code
+        }
+
+        function toggleSelectAll(master) {
+            const checkboxes = document.querySelectorAll('.asset-checkbox');
+            checkboxes.forEach(cb => cb.checked = master.checked);
+        }
+
+        function printSelectedQR() {
+            const checkboxes = document.querySelectorAll('.asset-checkbox:checked');
+            let selectedAssets = [];
+
+            if (checkboxes.length === 0) {
+                selectedAssets = getFilteredAssets();
+            } else {
+                checkboxes.forEach(cb => {
+                    const idx = parseInt(cb.getAttribute('data-index'));
+                    if (assets[idx]) selectedAssets.push(assets[idx]);
+                });
+            }
+
+            if (selectedAssets.length === 0) {
+                alert("ไม่มีรายการครุภัณฑ์ให้พิมพ์");
+                return;
+            }
+
+            generatePrintLabels(selectedAssets);
+        }
+
+        function generatePrintLabels(items) {
+            const container = document.getElementById('print-grid');
+            container.innerHTML = '';
+
+            items.forEach((item, i) => {
+                const card = document.createElement('div');
+                card.className = "border-2 border-slate-800 rounded-xl p-3 flex items-center space-x-3 bg-white";
+                const qrid = `print-qr-${i}`;
+
+                card.innerHTML = `
+                    <div id="${qrid}" class="p-1 border border-slate-300 rounded flex-shrink-0"></div>
+                    <div class="flex-grow text-left space-y-0.5 overflow-hidden">
+                        <div class="flex items-center space-x-1 border-b border-slate-200 pb-1">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Emblem_of_Phuket_City.png/480px-Emblem_of_Phuket_City.png" class="h-5 w-5 object-contain" onerror="this.onerror=null; this.src='https://placehold.co/40x40/047857/ffffff?text=PKT';">
+                            <span class="text-[10px] font-bold text-slate-800 truncate">เทศบาลนครภูเก็ต (ศบส.)</span>
+                        </div>
+                        <p class="text-[11px] font-bold text-slate-900 truncate mt-1">${escapeHtml(item.name)}</p>
+                        <p class="text-[12px] font-mono font-bold text-emerald-800">${escapeHtml(item.newCode)}</p>
+                        <p class="text-[9px] text-slate-600 truncate">ที่อยู่: ${escapeHtml(item.location)}</p>
+                    </div>
+                `;
+
+                container.appendChild(card);
+
+                setTimeout(() => {
+                    const el = document.getElementById(qrid);
+                    if (el) {
+                        new QRCode(el, {
+                            text: item.newCode || item.name,
+                            width: 70,
+                            height: 70,
+                            correctLevel: QRCode.CorrectLevel.M
+                        });
+                    }
+                }, 10);
+            });
+
+            setTimeout(() => {
+                window.print();
+            }, 500);
+        }
+
+        // Apps Script Modal & Configuration
+        function openAppsScriptModal() {
+            document.getElementById('appscript-modal').classList.remove('hidden');
+        }
+
+        function closeAppsScriptModal() {
+            document.getElementById('appscript-modal').classList.add('hidden');
+        }
+
+        function saveAppsScriptUrl() {
+            const inputUrl = document.getElementById('appscript-url-input').value.trim();
+            const url = inputUrl || DEFAULT_SCRIPT_URL;
+            if (url && !url.startsWith("https://script.google.com")) {
+                alert("กรุณาระบุ URL ที่ถูกต้องของ Google Apps Script (https://script.google.com/...)");
+                return;
+            }
+            scriptUrl = url;
+            localStorage.setItem("phuket_appscript_url", url);
+            closeAppsScriptModal();
+
+            if (url) {
+                fetchSheetData();
+            } else {
+                showSyncStatus(true);
+            }
+        }
+
+        function copyAppsScriptCode() {
+            const codeArea = document.getElementById('appscript-code-area');
+            codeArea.select();
+            document.execCommand('copy');
+            alert("คัดลอกซอร์สโค้ด Google Apps Script สำเร็จแล้ว!");
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
