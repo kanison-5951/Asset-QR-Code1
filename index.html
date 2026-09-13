@@ -653,67 +653,50 @@
         let activeCategory = "ทั้งหมด";
         let html5QrCode = null;
         let isScanningCamera = false;
-        const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz9n8bO56PyGEgqGw228Lu4EedlewbWb94_EUjS0k4E6IqCaRK5cox5G5NGefEST0vu0Q/exec";
+        const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwf46sQv02t4BTpAHmYhp6Q5xsaKjs7D0y42a0gPwrv9e4o8DCkNMrLm6kbp1UF5GpoVQ/exec";
         let scriptUrl = localStorage.getItem("phuket_appscript_url") || DEFAULT_SCRIPT_URL;
 
-        // Corrected 10-column & Categories Google Apps Script Code
+        // Corrected 10-column Google Apps Script Code
         const GOOGLE_APPS_SCRIPT_CODE = `// ==========================================
 // Google Apps Script สำหรับระบบบริหารจัดการครุภัณฑ์ เทศบาลนครภูเก็ต
 // ==========================================
 
 const SHEET_NAME = "รายการครุภัณฑ์";
-const CAT_SHEET_NAME = "หมวดหมู่";
-const TIME_ZONE = "Asia/Bangkok"; // อิงเวลาประเทศไทย
 
 function doGet(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  // 1. ดึงข้อมูลครุภัณฑ์
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = createInitialSheet(ss);
   }
   
   const data = sheet.getDataRange().getValues();
-  const items = [];
-  if (data.length > 1) {
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (!row[0] && !row[1] && !row[7]) continue; // Skip empty rows
-      
-      items.push({
-        category: row[0] || "",
-        name: row[1] || "",
-        details: row[2] || "",
-        budget: row[3] || "",
-        price: parseFloat(row[4]) || 0,
-        date: formatDate(row[5]),
-        dika: row[6] || "",
-        newCode: row[7] || "",
-        location: row[8] || "",
-        oldCode: row[9] || ""
-      });
-    }
-  }
-
-  // 2. ดึงข้อมูลหมวดหมู่ครุภัณฑ์
-  let catSheet = ss.getSheetByName(CAT_SHEET_NAME);
-  let categories = [];
-  if (catSheet) {
-    const catData = catSheet.getDataRange().getValues();
-    for (let i = 0; i < catData.length; i++) {
-      const val = catData[i][0];
-      if (val && val !== "ชื่อหมวดหมู่" && val !== "หมวดหมู่") {
-        categories.push(val.toString().trim());
-      }
-    }
+  if (data.length <= 1) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", data: [] }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
   
-  return ContentService.createTextOutput(JSON.stringify({ 
-    status: "success", 
-    data: items,
-    categories: categories 
-  })).setMimeType(ContentService.MimeType.JSON);
+  const items = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0] && !row[1] && !row[7]) continue; // Skip empty rows
+    
+    items.push({
+      category: row[0] || "",
+      name: row[1] || "",
+      details: row[2] || "",
+      budget: row[3] || "",
+      price: parseFloat(row[4]) || 0,
+      date: formatDate(row[5]),
+      dika: row[6] || "",
+      newCode: row[7] || "",
+      location: row[8] || "",
+      oldCode: row[9] || ""
+    });
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: "success", data: items }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
@@ -752,23 +735,10 @@ function doPost(e) {
           it.oldCode || ""
         ]);
         
+        // Insert exact 10 columns width range
         sheet.getRange(2, 1, rows.length, 10).setValues(rows);
       }
-
-      // บันทึกหมวดหมู่ถ้ามีการแนบมาด้วย
-      if (postData.categories && Array.isArray(postData.categories)) {
-        saveCategoriesSheet(ss, postData.categories);
-      }
-
       return ContentService.createTextOutput(JSON.stringify({ status: "success", count: items.length }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    if (action === "saveCategories") {
-      if (postData.categories && Array.isArray(postData.categories)) {
-        saveCategoriesSheet(ss, postData.categories);
-      }
-      return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
         .setMimeType(ContentService.MimeType.JSON);
     }
     
@@ -777,20 +747,6 @@ function doPost(e) {
   } catch(err) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-function saveCategoriesSheet(ss, categories) {
-  let catSheet = ss.getSheetByName(CAT_SHEET_NAME);
-  if (!catSheet) {
-    catSheet = ss.insertSheet(CAT_SHEET_NAME);
-  } else {
-    catSheet.clearContents();
-  }
-  catSheet.appendRow(["หมวดหมู่"]);
-  if (categories && categories.length > 0) {
-    const catRows = categories.map(c => [c]);
-    catSheet.getRange(2, 1, catRows.length, 1).setValues(catRows);
   }
 }
 
@@ -810,26 +766,10 @@ function createInitialSheet(ss) {
 function formatDate(val) {
   if (!val) return "";
   if (val instanceof Date) {
-    return Utilities.formatDate(val, TIME_ZONE, "yyyy-MM-dd");
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd");
   }
   return val.toString();
 }`;
-
-        function formatThaiDate(dateStr) {
-            if (!dateStr || dateStr === '-') return "-";
-            try {
-                const d = new Date(dateStr);
-                if (isNaN(d.getTime())) return dateStr;
-                return d.toLocaleDateString('th-TH', {
-                    timeZone: 'Asia/Bangkok',
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                });
-            } catch(e) {
-                return dateStr;
-            }
-        }
 
         // Initialize Page
         window.addEventListener('DOMContentLoaded', () => {
@@ -898,7 +838,7 @@ function formatDate(val) {
             `).join('');
         }
 
-        async function addNewCategory(e) {
+        function addNewCategory(e) {
             e.preventDefault();
             const input = document.getElementById('new-category-input');
             const val = input.value.trim();
@@ -912,12 +852,9 @@ function formatDate(val) {
             renderCategoryManageList();
             renderCategories();
             input.value = '';
-
-            // Sync Categories to Google Sheet
-            await syncCategoriesToSheet();
         }
 
-        async function deleteCategory(index) {
+        function deleteCategory(index) {
             const catName = customCategories[index];
             if (confirm(`คุณต้องการลบหมวดหมู่ "${catName}" ใช่หรือไม่?`)) {
                 customCategories.splice(index, 1);
@@ -926,26 +863,6 @@ function formatDate(val) {
                 if (activeCategory === catName) activeCategory = "ทั้งหมด";
                 renderCategories();
                 renderTable();
-
-                // Sync Categories to Google Sheet
-                await syncCategoriesToSheet();
-            }
-        }
-
-        async function syncCategoriesToSheet() {
-            if (!scriptUrl) return;
-            try {
-                const payload = {
-                    action: "saveCategories",
-                    categories: customCategories
-                };
-                await fetch(scriptUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(payload)
-                });
-            } catch(err) {
-                console.error("Sync categories error:", err);
             }
         }
 
@@ -994,22 +911,14 @@ function formatDate(val) {
             try {
                 const res = await fetch(scriptUrl);
                 const json = await res.json();
-                if (json.status === "success") {
-                    // Update categories from Sheet if available
-                    if (Array.isArray(json.categories) && json.categories.length > 0) {
-                        customCategories = json.categories;
-                        saveCategories();
-                    }
-
-                    if (Array.isArray(json.data)) {
-                        if (json.data.length > 0) {
-                            assets = json.data;
-                            saveLocalAssets();
-                            showSyncStatus(false);
-                            renderApp();
-                        } else {
-                            showSyncStatus(true, "ซิงค์สำเร็จแล้ว แต่ไม่พบข้อมูลใน Google Sheet (ตารางยังว่างเปล่า)", true);
-                        }
+                if (json.status === "success" && Array.isArray(json.data)) {
+                    if (json.data.length > 0) {
+                        assets = json.data;
+                        saveLocalAssets();
+                        showSyncStatus(false);
+                        renderApp();
+                    } else {
+                        showSyncStatus(true, "ซิงค์สำเร็จแล้ว แต่ไม่พบข้อมูลใน Google Sheet (ตารางยังว่างเปล่า)", true);
                     }
                 } else {
                     showSyncStatus(true, "เกิดข้อผิดพลาดในการอ่านข้อมูลจาก Google Sheet", true);
@@ -1026,8 +935,7 @@ function formatDate(val) {
             try {
                 const payload = {
                     action: "saveAll",
-                    items: assets,
-                    categories: customCategories
+                    items: assets
                 };
 
                 await fetch(scriptUrl, {
@@ -1050,7 +958,7 @@ function formatDate(val) {
             showSyncStatus(true, "กำลังส่งข้อมูลทั้งหมดขึ้น Google Sheet...", false);
             const success = await syncToGoogleSheet();
             if (success) {
-                alert("ส่งข้อมูลครุภัณฑ์และหมวดหมู่ปัจจุบันเข้า Google Sheet เรียบร้อยแล้ว!");
+                alert("ส่งข้อมูลครุภัณฑ์ปัจจุบันเข้า Google Sheet เรียบร้อยแล้ว!");
                 setTimeout(() => fetchSheetData(), 1200);
             } else {
                 alert("ไม่สามารถส่งข้อมูลไปที่ Google Sheet ได้ กรุณาตรวจสอบว่าได้ระบุ URL Web App และตั้งค่าเป็น Anyone ถูกต้องหรือไม่");
@@ -1154,7 +1062,7 @@ function formatDate(val) {
                         ฿${formattedPrice}
                     </td>
                     <td class="p-4 text-xs text-slate-600">
-                        ${formatThaiDate(item.date)}
+                        ${escapeHtml(item.date || '-')}
                     </td>
                     <td class="p-4">
                         <span class="inline-flex items-center text-xs font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
@@ -1195,12 +1103,80 @@ function formatDate(val) {
             });
         }
 
+        function openAssetModal(isEdit = false) {
+            document.getElementById('asset-modal-title').innerText = isEdit ? "แก้ไขข้อมูลครุภัณฑ์" : "เพิ่มครุภัณฑ์ใหม่";
+            document.getElementById('asset-modal').classList.remove('hidden');
+        }
+
+        function closeAssetModal() {
+            document.getElementById('asset-modal').classList.add('hidden');
+            document.getElementById('asset-form').reset();
+            document.getElementById('form-edit-index').value = "-1";
+        }
+
+        function editAsset(index) {
+            const item = assets[index];
+            if (!item) return;
+
+            document.getElementById('form-edit-index').value = index;
+            document.getElementById('form-category').value = item.category || "";
+            document.getElementById('form-name').value = item.name || "";
+            document.getElementById('form-new-code').value = item.newCode || "";
+            document.getElementById('form-old-code').value = item.oldCode || "";
+            document.getElementById('form-details').value = item.details || "";
+            document.getElementById('form-budget').value = item.budget || "เงินงบประมาณเทศบาล";
+            document.getElementById('form-price').value = item.price || "";
+            document.getElementById('form-date').value = item.date || "";
+            document.getElementById('form-dika').value = item.dika || "";
+            document.getElementById('form-location').value = item.location || "";
+
+            openAssetModal(true);
+        }
+
+        async function saveAsset(e) {
+            e.preventDefault();
+            const editIdx = parseInt(document.getElementById('form-edit-index').value);
+
+            const newItem = {
+                category: document.getElementById('form-category').value,
+                name: document.getElementById('form-name').value,
+                newCode: document.getElementById('form-new-code').value,
+                oldCode: document.getElementById('form-old-code').value,
+                details: document.getElementById('form-details').value,
+                budget: document.getElementById('form-budget').value,
+                price: parseFloat(document.getElementById('form-price').value) || 0,
+                date: document.getElementById('form-date').value,
+                dika: document.getElementById('form-dika').value,
+                location: document.getElementById('form-location').value
+            };
+
+            if (editIdx >= 0 && editIdx < assets.length) {
+                assets[editIdx] = newItem;
+            } else {
+                assets.unshift(newItem);
+            }
+
+            saveLocalAssets();
+            renderApp();
+            closeAssetModal();
+            
+            // Sync to Google Sheet
+            await syncToGoogleSheet();
+        }
+
+        async function deleteAsset(index) {
+            if (confirm(`คุณต้องการลบรายการครุภัณฑ์ "${assets[index].name}" (${assets[index].newCode}) ใช่หรือไม่?`)) {
+                assets.splice(index, 1);
+                saveLocalAssets();
+                renderApp();
+                await syncToGoogleSheet();
+            }
+        }
+
         function generateAutoCode() {
-            const now = new Date();
-            const thaiYearStr = new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', year: 'numeric' }).format(now);
-            const shortYear = thaiYearStr.substring(thaiYearStr.length - 2);
+            const year = (new Date().getFullYear() + 543).toString().substring(2);
             const randomId = Math.floor(1000 + Math.random() * 9000);
-            document.getElementById('form-new-code').value = `7440-00${Math.floor(Math.random()*9)+1}-${randomId}/${shortYear}`;
+            document.getElementById('form-new-code').value = `7440-00${Math.floor(Math.random()*9)+1}-${randomId}/${year}`;
         }
 
         let currentViewIndex = -1;
@@ -1217,7 +1193,7 @@ function formatDate(val) {
             document.getElementById('view-location').innerText = item.location || "-";
             document.getElementById('view-budget').innerText = item.budget || "-";
             document.getElementById('view-price').innerText = '฿' + (parseFloat(item.price) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
-            document.getElementById('view-date').innerText = formatThaiDate(item.date);
+            document.getElementById('view-date').innerText = item.date || "-";
             document.getElementById('view-dika').innerText = item.dika || "-";
             document.getElementById('view-oldcode').innerText = item.oldCode || "-";
 
