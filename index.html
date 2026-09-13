@@ -63,7 +63,15 @@
             background: rgba(4, 120, 87, 0.95);
             backdrop-filter: blur(10px);
         }
-    </style>
+    
+/* Thai Buddhist calendar */
+#thai-calendar button{font-family:inherit}
+.thai-cal-day{height:34px;border-radius:9px;font-size:13px;color:#334155}
+.thai-cal-day:hover{background:#ecfdf5;color:#047857}
+.thai-cal-day.today{font-weight:800;box-shadow:inset 0 0 0 1px #10b981}
+.thai-cal-day.selected{background:#047857;color:#fff}
+.thai-cal-day.muted{color:#cbd5e1}
+</style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
@@ -365,7 +373,29 @@
                     <!-- วัน/เดือน/ปี ที่ได้รับกรรมสิทธิ -->
                     <div>
                         <label class="block text-xs font-bold text-slate-700 uppercase mb-1">วันที่ได้รับกรรมสิทธิ</label>
-                        <input type="date" id="form-date" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <div class="relative">
+  <input type="text" id="form-date" inputmode="numeric" autocomplete="off" placeholder="วว/ดด/พ.ศ. เช่น 13/09/2569"
+         class="w-full p-2.5 pr-11 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+         onclick="toggleThaiCalendar()" oninput="normalizeThaiDateInput(this)">
+  <button type="button" onclick="toggleThaiCalendar(event)" class="absolute right-1 top-1 p-2 text-emerald-700 hover:bg-emerald-50 rounded-lg" aria-label="เปิดปฏิทิน">
+    <i class="fa-regular fa-calendar-days"></i>
+  </button>
+  <div id="thai-calendar" class="hidden absolute z-[80] mt-2 w-[310px] max-w-[calc(100vw-32px)] bg-white border border-slate-200 rounded-2xl shadow-2xl p-3 left-0">
+    <div class="flex items-center justify-between mb-2">
+      <button type="button" onclick="thaiCalendarPrev()" class="w-9 h-9 rounded-lg hover:bg-emerald-50 text-emerald-700"><i class="fa-solid fa-chevron-left"></i></button>
+      <div id="thai-calendar-title" class="font-bold text-emerald-800 text-sm"></div>
+      <button type="button" onclick="thaiCalendarNext()" class="w-9 h-9 rounded-lg hover:bg-emerald-50 text-emerald-700"><i class="fa-solid fa-chevron-right"></i></button>
+    </div>
+    <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-slate-400 mb-1">
+      <div>อา</div><div>จ</div><div>อ</div><div>พ</div><div>พฤ</div><div>ศ</div><div>ส</div>
+    </div>
+    <div id="thai-calendar-days" class="grid grid-cols-7 gap-1"></div>
+    <div class="mt-2 pt-2 border-t border-slate-100 flex justify-between">
+      <button type="button" onclick="thaiCalendarToday()" class="text-xs font-semibold text-emerald-700 hover:underline">วันนี้</button>
+      <button type="button" onclick="closeThaiCalendar()" class="text-xs text-slate-500 hover:underline">ปิด</button>
+    </div>
+  </div>
+</div>
                     </div>
 
                     <!-- เลขที่ฎีกา -->
@@ -728,7 +758,7 @@ function doPost(e) {
           it.details || "",
           it.budget || "",
           parseFloat(it.price) || 0,
-          it.date || "",
+          normalizeThaiDate(it.date),
           it.dika || "",
           it.newCode || "",
           it.location || "",
@@ -766,10 +796,24 @@ function createInitialSheet(ss) {
 function formatDate(val) {
   if (!val) return "";
   if (val instanceof Date) {
-    return Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd");
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "dd/MM/") + (parseInt(Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy"), 10) + 543);
+  }
+  const m = String(val).match(/^(\\d{1,2})[\\/\\-](\\d{1,2})[\\/\\-](\\d{4})$/);
+  if (m) {
+    let y = parseInt(m[3],10);
+    if (y < 2400) y += 543;
+    return ("0"+m[1]).slice(-2)+"/"+("0"+m[2]).slice(-2)+"/"+y;
   }
   return val.toString();
-}`;
+}
+function normalizeThaiDate(val) {
+  if (!val) return "";
+  const m = String(val).match(/^(\\d{1,2})[\\/\\-](\\d{1,2})[\\/\\-](\\d{4})$/);
+  if (!m) return val;
+  let y = parseInt(m[3],10);
+  if (y < 2400) y += 543;
+  return ("0"+m[1]).slice(-2)+"/"+("0"+m[2]).slice(-2)+"/"+y;
+ }`;
 
         // Initialize Page
         window.addEventListener('DOMContentLoaded', () => {
@@ -784,6 +828,104 @@ function formatDate(val) {
                 showSyncStatus(true, "ยังไม่ได้ตั้งค่า Web App URL ของ Google Apps Script ข้อมูลปัจจุบันจะทำงานในโหมดตัวอย่าง (Local)");
             }
         });
+
+        // ===== Thai Buddhist date + Thailand time =====
+        const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+        let thaiCalYear = new Date().getFullYear();
+        let thaiCalMonth = new Date().getMonth();
+
+        function thaiNowParts() {
+            const parts = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            }).formatToParts(new Date());
+            const o = {};
+            parts.forEach(p => { if (p.type !== 'literal') o[p.type] = p.value; });
+            return { year:+o.year, month:+o.month-1, day:+o.day, hour:+o.hour, minute:+o.minute, second:+o.second };
+        }
+
+        function formatThaiDate(day, month, year) {
+            return String(day).padStart(2,'0') + '/' + String(month+1).padStart(2,'0') + '/' + (year+543);
+        }
+
+        function normalizeThaiDate(v) {
+            if (!v) return '';
+            const m = String(v).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (!m) return String(v).trim();
+            let y = parseInt(m[3],10);
+            if (y < 2400) y += 543;
+            return String(parseInt(m[1],10)).padStart(2,'0') + '/' + String(parseInt(m[2],10)).padStart(2,'0') + '/' + y;
+        }
+
+        function normalizeThaiDateInput(el) {
+            let v = el.value.replace(/[^0-9\/\-]/g,'');
+            if (/^\d{8}$/.test(v)) v = v.slice(0,2)+'/'+v.slice(2,4)+'/'+v.slice(4);
+            el.value = v;
+        }
+
+        function parseThaiDate(v) {
+            const m = String(v||'').match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (!m) return null;
+            let y = +m[3]; if (y >= 2400) y -= 543;
+            const mo = +m[2]-1, d = +m[1];
+            const dt = new Date(y, mo, d);
+            if (dt.getFullYear()!==y || dt.getMonth()!==mo || dt.getDate()!==d) return null;
+            return {day:d, month:mo, year:y};
+        }
+
+        function toggleThaiCalendar(e) {
+            if (e) e.stopPropagation();
+            const el = document.getElementById('thai-calendar');
+            if (el.classList.contains('hidden')) {
+                const p = parseThaiDate(document.getElementById('form-date').value);
+                const n = thaiNowParts();
+                thaiCalYear = p ? p.year : n.year;
+                thaiCalMonth = p ? p.month : n.month;
+                renderThaiCalendar();
+                el.classList.remove('hidden');
+            } else closeThaiCalendar();
+        }
+        function closeThaiCalendar(){ document.getElementById('thai-calendar').classList.add('hidden'); }
+        function thaiCalendarPrev(){ thaiCalMonth--; if(thaiCalMonth<0){thaiCalMonth=11;thaiCalYear--;} renderThaiCalendar(); }
+        function thaiCalendarNext(){ thaiCalMonth++; if(thaiCalMonth>11){thaiCalMonth=0;thaiCalYear++;} renderThaiCalendar(); }
+        function thaiCalendarToday(){ const n=thaiNowParts(); thaiCalYear=n.year; thaiCalMonth=n.month; pickThaiDate(n.day,n.month,n.year); }
+        function pickThaiDate(day,month,year){
+            document.getElementById('form-date').value = formatThaiDate(day,month,year);
+            closeThaiCalendar();
+        }
+        function renderThaiCalendar(){
+            const title=document.getElementById('thai-calendar-title');
+            title.textContent=THAI_MONTHS[thaiCalMonth]+' '+(thaiCalYear+543);
+            const box=document.getElementById('thai-calendar-days'); box.innerHTML='';
+            const first=new Date(thaiCalYear,thaiCalMonth,1).getDay();
+            const days=new Date(thaiCalYear,thaiCalMonth+1,0).getDate();
+            const prevDays=new Date(thaiCalYear,thaiCalMonth,0).getDate();
+            const selected=parseThaiDate(document.getElementById('form-date').value);
+            const now=thaiNowParts();
+            for(let i=0;i<42;i++){
+                let d=i-first+1, y=thaiCalYear, m=thaiCalMonth, muted=false;
+                if(d<=0){d=prevDays+d;m--;if(m<0){m=11;y--; } muted=true;}
+                else if(d>days){d=d-days;m++;if(m>11){m=0;y++;} muted=true;}
+                const b=document.createElement('button'); b.type='button'; b.className='thai-cal-day'+(muted?' muted':''); b.textContent=d;
+                if(d===now.day&&m===now.month&&y===now.year) b.classList.add('today');
+                if(selected&&d===selected.day&&m===selected.month&&y===selected.year) b.classList.add('selected');
+                b.onclick=()=>pickThaiDate(d,m,y); box.appendChild(b);
+            }
+        }
+
+        function updateThaiClock(){
+            const n=thaiNowParts();
+            const date=formatThaiDate(n.day,n.month,n.year);
+            const time=[n.hour,n.minute,n.second].map(x=>String(x).padStart(2,'0')).join(':');
+            const el=document.getElementById('thai-clock');
+            if(el) el.textContent='เวลาไทย (UTC+7) • '+date+' '+time+' น.';
+        }
+        setInterval(updateThaiClock,1000);
+        document.addEventListener('click', e=>{
+            const cal=document.getElementById('thai-calendar');
+            if(cal && !cal.classList.contains('hidden') && !e.target.closest('#thai-calendar') && !e.target.closest('#form-date')) closeThaiCalendar();
+        });
+        updateThaiClock();
 
         // Category Management Functions
         function loadCategories() {
@@ -1126,7 +1268,7 @@ function formatDate(val) {
             document.getElementById('form-details').value = item.details || "";
             document.getElementById('form-budget').value = item.budget || "เงินงบประมาณเทศบาล";
             document.getElementById('form-price').value = item.price || "";
-            document.getElementById('form-date').value = item.date || "";
+            document.getElementById('form-date').value = normalizeThaiDate(item.date || '');
             document.getElementById('form-dika').value = item.dika || "";
             document.getElementById('form-location').value = item.location || "";
 
