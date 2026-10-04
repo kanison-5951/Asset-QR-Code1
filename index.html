@@ -344,6 +344,56 @@
         body.qr-scan-only > #detailModal > div {
             max-height: 92vh !important;
         }
+
+        /* ==================== THAI BE DATE PICKER VISIBILITY ==================== */
+        /* ทำให้ตัวเลือกเดือน/ปีอ่านได้ชัดบนพื้นหลังของปฏิทิน */
+        #thaiDatePicker #thaiDateMonth,
+        #thaiDatePicker #thaiDateYear {
+            color: #111827 !important;
+            background-color: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            -webkit-text-fill-color: #111827 !important;
+        }
+
+        #thaiDatePicker #thaiDateMonth option,
+        #thaiDatePicker #thaiDateYear option {
+            color: #111827 !important;
+            background-color: #ffffff !important;
+            -webkit-text-fill-color: #111827 !important;
+        }
+
+        #thaiDatePicker .thai-date-day {
+            color: #111827 !important;
+            background-color: #ffffff;
+        }
+
+        #thaiDatePicker .thai-date-day:hover {
+            color: #14532d !important;
+            background-color: #dcfce7 !important;
+        }
+
+        #thaiDatePicker .thai-date-day.is-selected {
+            color: #ffffff !important;
+            background-color: #15803d !important;
+        }
+
+        #thaiDatePicker .thai-date-day.is-selected:hover {
+            color: #ffffff !important;
+            background-color: #166534 !important;
+        }
+
+        #thaiDatePicker .thai-date-day.is-sunday {
+            color: #dc2626 !important;
+        }
+
+        #thaiDatePicker .thai-date-day.is-sunday.is-selected {
+            color: #ffffff !important;
+        }
+
+        #thaiDatePicker #thaiDateSelectedLabel {
+            color: rgba(255,255,255,.9) !important;
+        }
+
 </style>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col text-slate-800">
@@ -821,11 +871,70 @@
                         <input type="text" inputmode="decimal" id="formAmount" placeholder="0.00" autocomplete="off" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-phuket-600 focus:outline-none">
                     </div>
 
-                    <!-- Received Date in Thai BE -->
-                    <div>
+                    <!-- Received Date in Thai Buddhist Era -->
+                    <div class="relative">
                         <label class="block font-semibold text-slate-700 mb-1">วัน/เดือน/ปี ที่ได้รับกรรมสิทธิ์ (พ.ศ.) <span class="text-red-500">*</span></label>
-                        <input type="text" id="formReceivedDate" placeholder="วว/ดด/ปปปป (เช่น 15/10/2566)" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-phuket-600 focus:outline-none">
-                        <span class="text-[10px] text-slate-400 mt-0.5 block">รูปแบบ: วัน/เดือน/ปี พ.ศ. (ไม่ต้องระบุเวลา)</span>
+                        <div class="relative">
+                            <input type="text" id="formReceivedDate"
+                                placeholder="เลือกวัน/เดือน/ปี พ.ศ."
+                                readonly required
+                                onclick="toggleThaiDatePicker()"
+                                class="w-full px-3 py-2 pr-11 border border-slate-300 rounded-lg bg-white cursor-pointer focus:ring-2 focus:ring-phuket-600 focus:border-phuket-600 focus:outline-none transition">
+                            <button type="button" onclick="toggleThaiDatePicker()"
+                                class="absolute right-0 top-0 h-full w-10 text-phuket-600 hover:text-phuket-800 hover:bg-emerald-50 rounded-r-lg transition"
+                                title="เปิดปฏิทิน พ.ศ.">
+                                <i class="fa-solid fa-calendar-days"></i>
+                            </button>
+                        </div>
+                        <span class="text-[10px] text-slate-400 mt-0.5 block">เลือกปี พ.ศ. เดือน และวันจากปฏิทิน</span>
+
+                        <!-- Thai Buddhist Era Date Picker -->
+                        <div id="thaiDatePicker"
+                            class="hidden absolute z-[200] left-0 mt-2 w-[330px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
+                            <div class="bg-gradient-to-r from-phuket-800 to-blue-800 text-white px-4 py-3">
+                                <div class="flex items-center justify-between gap-2">
+                                    <button type="button" onclick="thaiDatePrevMonth()" class="w-8 h-8 rounded-lg hover:bg-white/15 transition" title="เดือนก่อนหน้า">
+                                        <i class="fa-solid fa-chevron-left"></i>
+                                    </button>
+                                    <div class="flex items-center gap-2 flex-1 justify-center">
+                                        <select id="thaiDateMonth"
+                                            onchange="thaiDateChangeMonth(this.value)"
+                                            class="bg-white/15 border border-white/20 text-white rounded-lg px-2 py-1.5 text-sm font-bold focus:outline-none">
+                                        </select>
+                                        <select id="thaiDateYear"
+                                            onchange="thaiDateChangeYear(this.value)"
+                                            class="bg-white/15 border border-white/20 text-white rounded-lg px-2 py-1.5 text-sm font-bold focus:outline-none">
+                                        </select>
+                                    </div>
+                                    <button type="button" onclick="thaiDateNextMonth()" class="w-8 h-8 rounded-lg hover:bg-white/15 transition" title="เดือนถัดไป">
+                                        <i class="fa-solid fa-chevron-right"></i>
+                                    </button>
+                                </div>
+                                <div id="thaiDateSelectedLabel" class="text-center text-xs text-white/75 mt-2">เลือกวันที่ได้รับกรรมสิทธิ์</div>
+                            </div>
+
+                            <div class="p-3">
+                                <div class="grid grid-cols-7 gap-1 mb-1">
+                                    <div class="text-center text-[11px] font-bold text-red-500 py-1">อา.</div>
+                                    <div class="text-center text-[11px] font-bold text-slate-500 py-1">จ.</div>
+                                    <div class="text-center text-[11px] font-bold text-slate-500 py-1">อ.</div>
+                                    <div class="text-center text-[11px] font-bold text-slate-500 py-1">พ.</div>
+                                    <div class="text-center text-[11px] font-bold text-slate-500 py-1">พฤ.</div>
+                                    <div class="text-center text-[11px] font-bold text-slate-500 py-1">ศ.</div>
+                                    <div class="text-center text-[11px] font-bold text-slate-500 py-1">ส.</div>
+                                </div>
+                                <div id="thaiDateDays" class="grid grid-cols-7 gap-1"></div>
+                            </div>
+
+                            <div class="px-3 py-2.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                                <button type="button" onclick="thaiDateToday()" class="text-xs font-semibold text-phuket-700 hover:text-phuket-900">
+                                    <i class="fa-solid fa-calendar-check mr-1"></i>วันนี้
+                                </button>
+                                <button type="button" onclick="closeThaiDatePicker()" class="text-xs font-semibold text-slate-500 hover:text-slate-700">
+                                    ปิด
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Dika Voucher No -->
@@ -1229,6 +1338,199 @@ function responseJSON(obj) {
         let gasWebAppUrl = localStorage.getItem('phuket_gas_url') || DEFAULT_GAS_WEB_APP_URL;
         let gasConnectionStatus = 'connecting';
         let html5QrCodeScanner = null;
+
+        // ==================== THAI BUDDHIST ERA DATE PICKER ====================
+        const THAI_MONTHS_FULL = [
+            'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+            'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+        ];
+
+        let thaiPickerYear = new Date().getFullYear() + 543;
+        let thaiPickerMonth = new Date().getMonth();
+        let thaiPickerSelected = null;
+
+        function getThaiDateParts(value) {
+            if (!value) return null;
+            const raw = String(value).trim();
+            let m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (m) {
+                const y = Number(m[3]);
+                return { day: Number(m[1]), month: Number(m[2]) - 1, year: y < 2400 ? y + 543 : y };
+            }
+            m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (m) return { day: Number(m[3]), month: Number(m[2]) - 1, year: Number(m[1]) + 543 };
+            return null;
+        }
+
+        function thaiDatePickerInit() {
+            const parts = getThaiDateParts(document.getElementById('formReceivedDate')?.value);
+            if (parts) {
+                thaiPickerYear = parts.year;
+                thaiPickerMonth = parts.month;
+                thaiPickerSelected = parts;
+            } else {
+                const now = new Date();
+                thaiPickerYear = now.getFullYear() + 543;
+                thaiPickerMonth = now.getMonth();
+                thaiPickerSelected = null;
+            }
+            populateThaiDateSelectors();
+            renderThaiDateCalendar();
+        }
+
+        function populateThaiDateSelectors() {
+            const monthEl = document.getElementById('thaiDateMonth');
+            const yearEl = document.getElementById('thaiDateYear');
+            if (!monthEl || !yearEl) return;
+
+            monthEl.innerHTML = THAI_MONTHS_FULL.map((m, i) =>
+                `<option value="${i}" ${i === thaiPickerMonth ? 'selected' : ''}>${m}</option>`
+            ).join('');
+
+            const currentBE = new Date().getFullYear() + 543;
+            const minYear = 2400;
+            const maxYear = currentBE + 10;
+            yearEl.innerHTML = Array.from({length: maxYear - minYear + 1}, (_, i) => minYear + i)
+                .map(y => `<option value="${y}" ${y === thaiPickerYear ? 'selected' : ''}>${y}</option>`)
+                .join('');
+        }
+
+        function renderThaiDateCalendar() {
+            const daysEl = document.getElementById('thaiDateDays');
+            const labelEl = document.getElementById('thaiDateSelectedLabel');
+            if (!daysEl) return;
+
+            populateThaiDateSelectors();
+
+            const gregYear = thaiPickerYear - 543;
+            const firstDay = new Date(gregYear, thaiPickerMonth, 1).getDay();
+            const daysInMonth = new Date(gregYear, thaiPickerMonth + 1, 0).getDate();
+
+            let html = '';
+
+            // Empty cells before the first day
+            for (let i = 0; i < firstDay; i++) {
+                html += '<div class="thai-date-day is-outside"></div>';
+            }
+
+            const today = new Date();
+            const todayBE = {
+                day: today.getDate(),
+                month: today.getMonth(),
+                year: today.getFullYear() + 543
+            };
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const isSelected = thaiPickerSelected &&
+                    thaiPickerSelected.day === day &&
+                    thaiPickerSelected.month === thaiPickerMonth &&
+                    thaiPickerSelected.year === thaiPickerYear;
+
+                const isToday = todayBE.day === day &&
+                    todayBE.month === thaiPickerMonth &&
+                    todayBE.year === thaiPickerYear;
+
+                const dow = new Date(gregYear, thaiPickerMonth, day).getDay();
+                const classes = [
+                    'thai-date-day',
+                    isSelected ? 'is-selected' : '',
+                    isToday ? 'is-today' : '',
+                    dow === 0 ? 'is-sunday' : ''
+                ].filter(Boolean).join(' ');
+
+                html += `<button type="button" class="${classes}" onclick="selectThaiDate(${day})">${day}</button>`;
+            }
+
+            daysEl.innerHTML = html;
+
+            if (labelEl) {
+                labelEl.textContent = thaiPickerSelected
+                    ? `เลือกแล้ว ${String(thaiPickerSelected.day).padStart(2,'0')}/${String(thaiPickerSelected.month + 1).padStart(2,'0')}/${thaiPickerSelected.year}`
+                    : 'เลือกวันที่ได้รับกรรมสิทธิ์';
+            }
+        }
+
+        function toggleThaiDatePicker() {
+            const picker = document.getElementById('thaiDatePicker');
+            if (!picker) return;
+            if (picker.classList.contains('hidden')) {
+                thaiDatePickerInit();
+                picker.classList.remove('hidden');
+            } else {
+                closeThaiDatePicker();
+            }
+        }
+
+        function closeThaiDatePicker() {
+            document.getElementById('thaiDatePicker')?.classList.add('hidden');
+        }
+
+        function thaiDatePrevMonth() {
+            thaiPickerMonth--;
+            if (thaiPickerMonth < 0) {
+                thaiPickerMonth = 11;
+                thaiPickerYear--;
+            }
+            renderThaiDateCalendar();
+        }
+
+        function thaiDateNextMonth() {
+            thaiPickerMonth++;
+            if (thaiPickerMonth > 11) {
+                thaiPickerMonth = 0;
+                thaiPickerYear++;
+            }
+            renderThaiDateCalendar();
+        }
+
+        function thaiDateChangeMonth(value) {
+            thaiPickerMonth = Number(value);
+            renderThaiDateCalendar();
+        }
+
+        function thaiDateChangeYear(value) {
+            thaiPickerYear = Number(value);
+            renderThaiDateCalendar();
+        }
+
+        function selectThaiDate(day) {
+            thaiPickerSelected = {
+                day,
+                month: thaiPickerMonth,
+                year: thaiPickerYear
+            };
+
+            const formatted =
+                `${String(day).padStart(2, '0')}/${String(thaiPickerMonth + 1).padStart(2, '0')}/${thaiPickerYear}`;
+
+            document.getElementById('formReceivedDate').value = formatted;
+            renderThaiDateCalendar();
+            closeThaiDatePicker();
+        }
+
+        function thaiDateToday() {
+            const now = new Date();
+            thaiPickerYear = now.getFullYear() + 543;
+            thaiPickerMonth = now.getMonth();
+            thaiPickerSelected = {
+                day: now.getDate(),
+                month: now.getMonth(),
+                year: now.getFullYear() + 543
+            };
+            document.getElementById('formReceivedDate').value =
+                `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()+543}`;
+            renderThaiDateCalendar();
+            closeThaiDatePicker();
+        }
+
+        document.addEventListener('click', function(event) {
+            const picker = document.getElementById('thaiDatePicker');
+            const input = document.getElementById('formReceivedDate');
+            if (!picker || picker.classList.contains('hidden')) return;
+            if (!picker.contains(event.target) && event.target !== input && !event.target.closest('#formReceivedDate') && !event.target.closest('[onclick="toggleThaiDatePicker()"]')) {
+                closeThaiDatePicker();
+            }
+        });
 
         // แปลงวันที่ให้แสดงเฉพาะ วัน/เดือน/ปี พ.ศ. เช่น 15/10/2569
         function formatThaiDate(value) {
