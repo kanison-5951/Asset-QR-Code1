@@ -104,6 +104,13 @@
                 overflow: hidden !important;
             }
 
+            /* QR บนสติ๊กเกอร์ ~27 มม. และบังคับให้พิมพ์สีเต็ม (ห้ามให้เบราว์เซอร์ลดสี/เบลอ) */
+            .print-sticker .qr-print-target img {
+                width: 27mm !important; height: 27mm !important;
+                image-rendering: -webkit-optimize-contrast;
+                -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+            }
+
             .print-sticker {
                 width: 100mm !important;
                 max-width: 100mm !important;
@@ -1325,6 +1332,151 @@ function responseJSON(obj) {
             });
         }
 
+        // ===== QR Core (แก้ปัญหา QR พิมพ์แล้วสแกนไม่ติด) =====
+        // 1) ลิงก์ที่ฝังใน QR: ถ้าเปิดไฟล์จากเครื่อง (file://) origin จะเป็น "null" -> QR ใช้ไม่ได้
+        //    ใส่ URL จริงของเว็บไว้ที่ PUBLIC_BASE_URL (หรือระบบจะถามตอนพิมพ์ครั้งแรก)
+        //    ตัวอย่าง: const PUBLIC_BASE_URL = 'https://yourname.github.io/asset/index.html';
+        const PUBLIC_BASE_URL = '';
+
+        function getScanBaseUrl() {
+            let base = (PUBLIC_BASE_URL || '').trim();
+            if (!base) { try { base = (localStorage.getItem('phuket_public_base_url') || '').trim(); } catch (e) {} }
+            if (!base) {
+                const loc = window.location;
+                base = (loc.protocol === 'file:' || !loc.origin || loc.origin === 'null')
+                    ? loc.href
+                    : loc.origin + loc.pathname;
+            }
+            return base.split('#')[0].split('?')[0];
+        }
+
+        function buildScanUrl(id) {
+            return `${getScanBaseUrl()}?id=${encodeURIComponent(id)}`;
+        }
+
+        function isShareableUrl(url) {
+            try {
+                const u = new URL(url);
+                if (!/^https?:$/.test(u.protocol)) return false;
+                const h = u.hostname;
+                if (h === 'localhost' || /^127\./.test(h) || /^10\./.test(h) ||
+                    /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || h.endsWith('.local')) return false;
+                return true;
+            } catch (e) { return false; }
+        }
+
+        let qrBaseUrlAsked = false;
+        function ensureShareableBaseUrl() {
+            const base = getScanBaseUrl();
+            if (isShareableUrl(base) || qrBaseUrlAsked) return;
+            qrBaseUrlAsked = true;
+            const input = prompt(
+                'ลิงก์ที่จะฝังใน QR ตอนนี้คือ:\n' + base +
+                '\n\nลิงก์นี้เปิดได้เฉพาะในเครื่องนี้ มือถือเครื่องอื่นสแกนแล้วจะเปิดไม่ได้\n' +
+                'กรุณากรอก URL จริงของเว็บนี้ (เช่น https://xxxx.github.io/index.html)\n' +
+                'หรือกด ยกเลิก เพื่อใช้ลิงก์เดิม', '');
+            const v = (input || '').trim();
+            if (/^https?:\/\//i.test(v)) {
+                try { localStorage.setItem('phuket_public_base_url', v.split('#')[0].split('?')[0]); } catch (e) {}
+            }
+        }
+
+        function escAttr(v) {
+            return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        }
+
+        // 2) สร้าง QR เองแบบ "1 โมดูล = จำนวนพิกเซลเต็ม" ความละเอียดสูง (ไม่เบลอ/ไม่เพี้ยนเวลาพิมพ์)
+        let _qrLogoPromise = null;
+        function loadQrLogo() {
+            if (!_qrLogoPromise) {
+                _qrLogoPromise = new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = () => resolve(null);
+                    img.src = QR_LOGO_DATA_URL;
+                });
+            }
+            return _qrLogoPromise;
+        }
+
+        async function makeQrCanvas(text, opts = {}) {
+            const size = opts.size || 600;
+            const quiet = (opts.quiet === undefined) ? 4 : opts.quiet;
+            const level = opts.level || 'H';
+            const dark = opts.dark || '#000000';
+            const light = opts.light || '#ffffff';
+            const logoRatio = (opts.logoRatio === undefined) ? 0.17 : opts.logoRatio;
+
+            // ใช้ QRCode.js เฉพาะส่วนคำนวณข้อมูล QR (ตัวโมเดล) แล้ววาดเองด้วย canvas
+            const holder = document.createElement('div');
+            const qr = new QRCode(holder, {
+                text: text, width: 16, height: 16,
+                colorDark: '#000000', colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel[level] || QRCode.CorrectLevel.H
+            });
+            let model = qr._oQRCode;
+            if (!model || typeof model.getModuleCount !== 'function') {
+                model = null;
+                for (const k in qr) {
+                    if (qr[k] && typeof qr[k].getModuleCount === 'function') { model = qr[k]; break; }
+                }
+            }
+            if (!model) throw new Error('สร้างข้อมูล QR ไม่สำเร็จ');
+
+            const count = model.getModuleCount();
+            const ms = Math.max(1, Math.floor(size / (count + quiet * 2)));
+            const qrPx = count * ms;
+            const offset = Math.floor((size - qrPx) / 2);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = light;
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = dark;
+            for (let r = 0; r < count; r++) {
+                for (let c = 0; c < count; c++) {
+                    if (model.isDark(r, c)) ctx.fillRect(offset + c * ms, offset + r * ms, ms, ms);
+                }
+            }
+
+            // โลโก้ตรงกลาง: เล็กพอ (~17% ของความกว้าง QR) เพื่อไม่ให้เกินความสามารถแก้ error ของ QR
+            if (opts.logo !== false && logoRatio > 0) {
+                const logo = await loadQrLogo();
+                if (logo) {
+                    const logoPx = Math.round(qrPx * logoRatio);
+                    const pad = Math.max(ms, Math.round(logoPx * 0.12));
+                    const x = Math.round((size - logoPx) / 2);
+                    const y = Math.round((size - logoPx) / 2);
+                    ctx.fillStyle = light;
+                    ctx.fillRect(x - pad, y - pad, logoPx + pad * 2, logoPx + pad * 2);
+                    ctx.drawImage(logo, x, y, logoPx, logoPx);
+                }
+            }
+            return canvas;
+        }
+
+        // วาด QR เป็นรูป <img> (data URL) ลงใน container — cloneNode/พิมพ์ได้โดยไม่หาย
+        async function renderQr(container, text, opts = {}) {
+            if (!container) return null;
+            const displaySize = opts.displaySize || 100;
+            const canvas = await makeQrCanvas(text, Object.assign({}, opts, {
+                size: opts.size || Math.max(displaySize * 6, 600)
+            }));
+            const img = new Image();
+            img.alt = 'QR Code';
+            img.className = 'qr-img';
+            img.style.width = displaySize + 'px';
+            img.style.height = displaySize + 'px';
+            img.style.display = 'block';
+            img.src = canvas.toDataURL('image/png');
+            container.innerHTML = '';
+            container.appendChild(img);
+            try { if (img.decode) await img.decode(); } catch (e) {}
+            return img;
+        }
+
         // Default System Categories
         let categories = ['โต๊ะ', 'เก้าอี้', 'ตู้', 'คอมพิวเตอร์', 'พัดลม', 'เครื่องปริ้น'];
 
@@ -1624,12 +1776,24 @@ function responseJSON(obj) {
             const urlParams = new URLSearchParams(window.location.search);
             const scanAssetId = urlParams.get('id') || urlParams.get('code');
             if (scanAssetId) {
-                const targetDecoded = decodeURIComponent(scanAssetId);
+                let targetDecoded = scanAssetId;
+                try { targetDecoded = decodeURIComponent(scanAssetId); } catch (e) {}
+                let tries = 0;
                 const checkInterval = setInterval(() => {
-                    const targetAsset = assets.find(a => a.id === targetDecoded || a.code === targetDecoded || a.id === scanAssetId || a.code === scanAssetId);
+                    tries++;
+                    const targetAsset = assets.find(a => String(a.id) === targetDecoded || String(a.code) === targetDecoded || String(a.id) === scanAssetId || String(a.code) === scanAssetId);
                     if (targetAsset) {
-                        openDetailModal(targetAsset);
                         clearInterval(checkInterval);
+                        // เปิดแบบเดียวกับการสแกนในแอป: แสดงเฉพาะรายละเอียดครุภัณฑ์ ไม่เปิดหน้ารายการทั้งหมด
+                        qrScanOnlyMode = true;
+                        qrReturnToLogin = true;
+                        document.body.classList.add('qr-scan-only');
+                        const loginPage = document.getElementById('startupLogin');
+                        if (loginPage) loginPage.classList.add('hidden');
+                        openDetailModal(targetAsset);
+                    } else if (tries > 100) { // ~30 วินาที ถ้ายังไม่พบให้หยุดและแจ้งผู้ใช้
+                        clearInterval(checkInterval);
+                        alert(`ไม่พบข้อมูลครุภัณฑ์รหัส: ${targetDecoded}`);
                     }
                 }, 300);
             }
@@ -1979,12 +2143,13 @@ function responseJSON(obj) {
         }
 
         async function renderBatchStickerPreview(items) {
+            ensureShareableBaseUrl();
             const container = document.getElementById('printStickerContainer');
             container.className = 'p-3 bg-slate-100 rounded-xl flex flex-wrap justify-center gap-2';
             container.innerHTML = items.map((item, index) => {
                 const qrId = `batchStickerQr-${index}-${String(item.id).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
                 return `
-                    <div class="batch-sticker print-sticker bg-white border-2 border-phuket-800 rounded-lg p-3 w-[380px] shadow-sm text-slate-900 font-sarabun relative overflow-hidden">
+                    <div data-asset-id="${escAttr(item.id)}" class="batch-sticker print-sticker bg-white border-2 border-phuket-800 rounded-lg p-3 w-[380px] shadow-sm text-slate-900 font-sarabun relative overflow-hidden">
                         <div class="text-center font-bold text-sm text-phuket-900 border-b-2 border-phuket-800 pb-1.5 mb-2 flex items-center justify-center gap-2">
                             <img src="Seal_of_Phuket.png" onerror="this.onerror=null; this.src='https://upload.wikimedia.org/wikipedia/commons/e/eb/Seal_of_Phuket.png';" class="w-6 h-6 object-contain">
                             <span>กองการแพทย์ (งบเงินบำรุง)</span>
@@ -2009,15 +2174,7 @@ function responseJSON(obj) {
                 const qrId = `batchStickerQr-${index}-${String(item.id).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
                 const qr = document.getElementById(qrId);
                 if (qr) {
-                    new QRCode(qr, {
-                        text: `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(item.id)}`,
-                        width: 72,
-                        height: 72,
-                        colorDark: '#0f172a',
-                        colorLight: '#ffffff',
-                        correctLevel: QRCode.CorrectLevel.H
-                    });
-                    await addLogoToQr(qr, 11);
+                    await renderQr(qr, buildScanUrl(item.id), { displaySize: 104, quiet: 2, level: 'Q', logoRatio: 0.16, dark: '#0f172a' });
                 }
             }
         }
@@ -2198,16 +2355,7 @@ function responseJSON(obj) {
                     const container = document.getElementById(safeQrId);
                     if (container) {
                         container.innerHTML = '';
-                        const scanUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(item.id)}`;
-                        new QRCode(container, {
-                            text: scanUrl,
-                            width: 48,
-                            height: 48,
-                            colorDark: '#14532d',
-                            colorLight: '#ffffff',
-                            correctLevel: QRCode.CorrectLevel.H
-                        });
-                        addLogoToQr(container, 7);
+                        renderQr(container, buildScanUrl(item.id), { displaySize: 56, quiet: 2, level: 'Q', logoRatio: 0.16, dark: '#14532d' });
                     }
                 });
             }
@@ -2270,17 +2418,8 @@ function responseJSON(obj) {
             modal.classList.remove('hidden');
             modal.classList.add('flex');
 
-            const scanUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(asset.id)}`;
-
-            new QRCode(preview, {
-                text: scanUrl,
-                width: 360,
-                height: 360,
-                colorDark: '#0f172a',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.H
-            });
-            addLogoToQr(preview, 48);
+            ensureShareableBaseUrl();
+            renderQr(preview, buildScanUrl(asset.id), { displaySize: 360, quiet: 4, level: 'H', logoRatio: 0.17, dark: '#0f172a' });
         }
 
         function closeAssetQrPreview() {
@@ -2292,7 +2431,7 @@ function responseJSON(obj) {
         }
 
         // ดาวน์โหลด QR Code ขนาด 1000x1000 px พร้อมชื่อครุภัณฑ์ใต้ QR
-        function downloadAssetQrCode() {
+        async function downloadAssetQrCode() {
             const id = window.currentQrPreviewAssetId;
             const asset = assets.find(a => String(a.id) === String(id));
             if (!asset) {
@@ -2300,86 +2439,50 @@ function responseJSON(obj) {
                 return;
             }
 
-            const scanUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(asset.id)}`;
-            const tempContainer = document.createElement('div');
-            tempContainer.style.position = 'fixed';
-            tempContainer.style.left = '-99999px';
-            tempContainer.style.top = '0';
-            tempContainer.style.width = '1000px';
-            tempContainer.style.height = '1000px';
-            tempContainer.style.background = '#ffffff';
-            document.body.appendChild(tempContainer);
+            ensureShareableBaseUrl();
 
-            new QRCode(tempContainer, {
-                text: scanUrl,
-                width: 1000,
-                height: 1000,
-                colorDark: '#0f172a',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.H
-            });
+            let qrCanvas;
+            try {
+                qrCanvas = await makeQrCanvas(buildScanUrl(asset.id), {
+                    size: 1000, quiet: 4, level: 'H', logoRatio: 0.17, dark: '#0f172a'
+                });
+            } catch (err) {
+                console.error(err);
+                alert('ไม่สามารถสร้างรูป QR Code ได้');
+                return;
+            }
 
-            setTimeout(async () => {
-                await addLogoToQr(tempContainer, 130);
-                const qrCanvas = tempContainer.querySelector('canvas');
-                const qrImg = tempContainer.querySelector('img');
+            const outputCanvas = document.createElement('canvas');
+            const nameAreaHeight = 150;
+            outputCanvas.width = 1000;
+            outputCanvas.height = 1000 + nameAreaHeight;
 
-                const outputCanvas = document.createElement('canvas');
-                const nameAreaHeight = 150;
-                outputCanvas.width = 1000;
-                outputCanvas.height = 1000 + nameAreaHeight;
+            const ctx = outputCanvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+            ctx.drawImage(qrCanvas, 0, 0, 1000, 1000);
 
-                const ctx = outputCanvas.getContext('2d');
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+            ctx.fillStyle = '#0f172a';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
 
-                const finishDownload = () => {
-                    ctx.fillStyle = '#0f172a';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
+            const name = String(asset.name || '-');
+            const maxWidth = 920;
+            let fontSize = 42;
+            ctx.font = `700 ${fontSize}px Arial, "Noto Sans Thai", sans-serif`;
+            while (ctx.measureText(name).width > maxWidth && fontSize > 22) {
+                fontSize -= 2;
+                ctx.font = `700 ${fontSize}px Arial, "Noto Sans Thai", sans-serif`;
+            }
+            ctx.fillText(name, 500, 1075, maxWidth);
 
-                    const name = String(asset.name || '-');
-                    const maxWidth = 920;
-                    let fontSize = 42;
-                    ctx.font = `700 ${fontSize}px Arial, "Noto Sans Thai", sans-serif`;
-
-                    while (ctx.measureText(name).width > maxWidth && fontSize > 22) {
-                        fontSize -= 2;
-                        ctx.font = `700 ${fontSize}px Arial, "Noto Sans Thai", sans-serif`;
-                    }
-
-                    ctx.fillText(name, 500, 1075, maxWidth);
-
-                    const link = document.createElement('a');
-                    link.href = outputCanvas.toDataURL('image/png');
-                    const safeCode = String(asset.code || asset.id || 'asset')
-                        .replace(/[\\/:*?"<>|]/g, '_');
-                    link.download = `QR-${safeCode}-1000x1000.png`;
-                    document.body.appendChild(link);
-                    link.click();
-                    link.remove();
-                    tempContainer.remove();
-                };
-
-                if (qrCanvas) {
-                    ctx.drawImage(qrCanvas, 0, 0, 1000, 1000);
-                    finishDownload();
-                } else if (qrImg && qrImg.src) {
-                    const image = new Image();
-                    image.onload = () => {
-                        ctx.drawImage(image, 0, 0, 1000, 1000);
-                        finishDownload();
-                    };
-                    image.onerror = () => {
-                        tempContainer.remove();
-                        alert('ไม่สามารถสร้างรูป QR Code ได้');
-                    };
-                    image.src = qrImg.src;
-                } else {
-                    tempContainer.remove();
-                    alert('ไม่สามารถสร้างรูป QR Code ได้');
-                }
-            }, 150);
+            const link = document.createElement('a');
+            link.href = outputCanvas.toDataURL('image/png');
+            const safeCode = String(asset.code || asset.id || 'asset').replace(/[\\/:*?"<>|]/g, '_');
+            link.download = `QR-${safeCode}-1000x1000.png`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
         }
 
         function openDetailModalById(id) {
@@ -2410,16 +2513,7 @@ function responseJSON(obj) {
             // Generate unique QR Code for detail view
             const qrContainer = document.getElementById('detailQrCode');
             qrContainer.innerHTML = '';
-            const scanUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(asset.id)}`;
-            new QRCode(qrContainer, {
-                text: scanUrl,
-                width: 64,
-                height: 64,
-                colorDark: '#14532d',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.H
-            });
-            addLogoToQr(qrContainer, 10);
+            renderQr(qrContainer, buildScanUrl(asset.id), { displaySize: 88, quiet: 2, level: 'Q', logoRatio: 0.16, dark: '#14532d' });
 
             openModal('detailModal');
         }
@@ -2464,17 +2558,10 @@ function responseJSON(obj) {
             const qrContainer = document.getElementById('stickerQrCode');
             qrContainer.innerHTML = '';
             
-            // Construct direct scanning URL with URL-safe encoded unique ID
-            const scanUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(item.id)}`;
-            new QRCode(qrContainer, {
-                text: scanUrl,
-                width: 72,
-                height: 72,
-                colorDark: '#0f172a',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.H
-            });
-            await addLogoToQr(qrContainer, 11);
+            ensureShareableBaseUrl();
+            const stickerRoot = container.querySelector('.print-sticker');
+            if (stickerRoot) stickerRoot.dataset.assetId = item.id;
+            await renderQr(qrContainer, buildScanUrl(item.id), { displaySize: 104, quiet: 2, level: 'Q', logoRatio: 0.16, dark: '#0f172a' });
 
             printStickerNow();
         }
@@ -2517,36 +2604,15 @@ function responseJSON(obj) {
                     clone.classList.remove('shadow-sm');
                     clone.removeAttribute('id');
 
-                    // canvas ที่สร้างโดย QRCode.js ไม่สามารถคัดลอก bitmap ด้วย cloneNode()
-                    // จึงต้องสร้าง QR Code ใหม่ใน clone หลังจากนำเข้า print DOM แล้ว
+                    // QR เป็น <img> (data URL) จึงคัดลอกไปพิมพ์ได้ตรง ๆ และใช้ ID เดิมของสติ๊กเกอร์เสมอ
+                    // (ของเดิมสร้าง QR ใหม่โดยเทียบ "รหัสครุภัณฑ์" ซึ่งอาจชนกัน/ไม่ตรง id ทำให้ QR ผิด)
                     const qrTarget = clone.querySelector('.qr-print-target');
                     if (qrTarget) {
-                        qrTarget.innerHTML = '';
-                        const assetId = sticker.querySelector('[id^="batchStickerQr-"]')
-                            ? sticker.querySelector('[id^="batchStickerQr-"]').id.split('-').slice(2).join('-')
-                            : null;
-                        let itemForQr = null;
-                        if (assetId) {
-                            itemForQr = stickerElements.find((s) => {
-                                const q = s.querySelector('[id^="batchStickerQr-"]');
-                                return q && q.id === sticker.querySelector('[id^="batchStickerQr-"]').id;
+                        qrTarget.removeAttribute('id');
+                        if (!qrTarget.querySelector('img') && sticker.dataset.assetId) {
+                            await renderQr(qrTarget, buildScanUrl(sticker.dataset.assetId), {
+                                displaySize: 104, quiet: 2, level: 'Q', logoRatio: 0.16, dark: '#0f172a'
                             });
-                        }
-                        // ใช้ URL จากข้อความรหัสครุภัณฑ์/ข้อมูลที่ผูกกับสติ๊กเกอร์
-                        const codeEl = clone.querySelector('.font-mono');
-                        const codeText = codeEl ? codeEl.textContent.trim() : '';
-                        const matchingAsset = assets.find(a => String(a.code || '').trim() === codeText);
-                        const scanId = matchingAsset ? matchingAsset.id : codeText;
-                        if (typeof QRCode !== 'undefined' && scanId) {
-                            new QRCode(qrTarget, {
-                                text: `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(scanId)}`,
-                                width: 72,
-                                height: 72,
-                                colorDark: '#0f172a',
-                                colorLight: '#ffffff',
-                                correctLevel: QRCode.CorrectLevel.H
-                            });
-                            await addLogoToQr(qrTarget, 11);
                         }
                     }
 
@@ -2557,7 +2623,14 @@ function responseJSON(obj) {
                 printGrid.appendChild(page);
             }
 
-            // รอให้ DOM พร้อมก่อนเปิด Print Preview
+            // รอให้รูป (โดยเฉพาะ QR) โหลดครบก่อนเปิด Print Preview ไม่งั้นอาจพิมพ์ออกมาเป็นกรอบว่าง
+            const pendingImgs = Array.from(printGrid.querySelectorAll('img')).filter(img => !img.complete);
+            if (pendingImgs.length) {
+                await Promise.race([
+                    Promise.all(pendingImgs.map(img => new Promise(res => { img.onload = img.onerror = res; }))),
+                    new Promise(res => setTimeout(res, 2000))
+                ]);
+            }
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => window.print());
             });
